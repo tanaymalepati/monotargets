@@ -151,41 +151,43 @@ struct SettingsView: View {
                 appeared = true
             }
         }
-        .fileImporter(
-            isPresented: $showFolderPicker,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            handleFolderSelection(result)
+        .sheet(isPresented: $showFolderPicker) {
+            DocumentPicker(mode: .folder) { url in
+                showFolderPicker = false
+                handleFolderSelection(url)
+            } onCancel: {
+                showFolderPicker = false
+            }
+            .ignoresSafeArea()
         }
-        .fileImporter(
-            isPresented: $showRestorePicker,
-            allowedContentTypes: [.json],
-            allowsMultipleSelection: false
-        ) { result in
-            handleRestore(result)
+        .sheet(isPresented: $showRestorePicker) {
+            DocumentPicker(mode: .jsonFile) { url in
+                showRestorePicker = false
+                handleRestore(url)
+            } onCancel: {
+                showRestorePicker = false
+            }
+            .ignoresSafeArea()
         }
     }
 
-    private func handleFolderSelection(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
+    private func handleFolderSelection(_ url: URL) {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         if let bookmark = BackupService.shared.createBookmark(for: url) {
             store.setBackupFolder(bookmark: bookmark)
-            backupStatus = .success("Folder set")
+            backupStatus = .success("Folder set ✓")
             Haptic.success()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { backupStatus = .idle }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { backupStatus = .idle }
         }
     }
 
-    private func handleRestore(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
+    private func handleRestore(_ url: URL) {
         if let vaultData = BackupService.shared.restoreFromURL(url) {
-            store.transactions  = vaultData.transactions
-            store.savingsItems  = vaultData.savingsItems
+            store.transactions = vaultData.transactions
+            store.savingsItems = vaultData.savingsItems
             store.save()
-            backupStatus = .success("Restored!")
+            backupStatus = .success("Restored ✓")
             Haptic.success()
         } else {
             backupStatus = .error("Could not parse file")
