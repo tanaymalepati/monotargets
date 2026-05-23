@@ -357,7 +357,7 @@ struct EmptyStateCard: View {
 struct TransactionRowView: View {
     @Environment(AppStore.self) private var store
     let transaction: Transaction
-    @State private var showEdit = false
+    @State private var showDetail = false
 
     var body: some View {
         HStack(spacing: Mono.S.md) {
@@ -395,11 +395,16 @@ struct TransactionRowView: View {
                     .font(Mono.T.mono(10, .medium))
                     .foregroundColor(Mono.C.textDim)
             }
+
+            // Chevron hint
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Mono.C.textDim)
         }
         .padding(.vertical, Mono.S.sm)
         .contentShape(Rectangle())
         .onTapGesture {
-            showEdit = true
+            showDetail = true
             Haptic.light()
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -412,20 +417,167 @@ struct TransactionRowView: View {
                 Label("Delete", systemImage: "trash")
             }
         }
-        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            Button {
-                showEdit = true
-                Haptic.light()
-            } label: {
-                Label("Edit", systemImage: "pencil")
-            }
-            .tint(Mono.C.surfaceTop)
-        }
-        .sheet(isPresented: $showEdit) {
-            EditTransactionView(transaction: transaction)
-                .presentationDetents([.large])
+        .sheet(isPresented: $showDetail) {
+            TransactionDetailSheet(transaction: transaction)
+                .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Mono.C.bg)
         }
+    }
+}
+
+// MARK: - Transaction Detail Sheet
+
+struct TransactionDetailSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    let transaction: Transaction
+    @State private var showEdit = false
+    @State private var showDeleteConfirm = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Mono.C.bg.ignoresSafeArea()
+
+                VStack(spacing: Mono.S.lg) {
+
+                    // Amount hero
+                    VStack(spacing: 8) {
+                        ZStack {
+                            Circle()
+                                .fill(Mono.C.surfaceUp)
+                                .frame(width: 56, height: 56)
+                            Image(systemName: transaction.type.symbol)
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundColor(
+                                    transaction.type == .inward ? Mono.C.positive : Mono.C.negative
+                                )
+                        }
+
+                        HStack(alignment: .lastTextBaseline, spacing: 4) {
+                            Text(transaction.type.isDebit ? "-₹" : "+₹")
+                                .font(Mono.T.mono(20, .semibold))
+                                .foregroundColor(Mono.C.textTert)
+                            Text(transaction.amount.indianFormattedNoSymbol)
+                                .font(Mono.T.mono(40, .bold))
+                                .foregroundColor(transaction.type.isDebit ? Mono.C.negative : Mono.C.positive)
+                        }
+
+                        Text(transaction.type.label.uppercased())
+                            .font(Mono.T.overline)
+                            .foregroundColor(Mono.C.textDim)
+                            .tracking(2)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Mono.S.lg)
+                    .monoCard()
+                    .padding(.horizontal, Mono.S.md)
+
+                    // Meta info
+                    VStack(spacing: 1) {
+                        DetailRow(icon: "text.alignleft", label: "Note",
+                                  value: transaction.note.isEmpty ? "—" : transaction.note)
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+                        DetailRow(icon: "calendar", label: "Date",
+                                  value: VaultDateFormatter.full.string(from: transaction.date))
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+                        DetailRow(icon: "number", label: "ID",
+                                  value: String(transaction.id.uuidString.prefix(8)).uppercased())
+                    }
+                    .monoCard()
+                    .padding(.horizontal, Mono.S.md)
+
+                    Spacer()
+
+                    // Actions
+                    VStack(spacing: 10) {
+                        Button {
+                            showEdit = true
+                            Haptic.medium()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "pencil.circle.fill")
+                                    .font(.system(size: 15))
+                                Text("Edit Transaction")
+                                    .font(Mono.T.mono(15, .semibold))
+                            }
+                            .foregroundColor(Mono.C.bg)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(
+                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                    .fill(Mono.C.text)
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        DangerButton(icon: "trash", label: "Delete Transaction") {
+                            showDeleteConfirm = true
+                        }
+                    }
+                    .padding(.horizontal, Mono.S.md)
+                    .padding(.bottom, Mono.S.lg)
+                }
+                .padding(.top, Mono.S.lg)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Transaction")
+                        .font(Mono.T.mono(15, .semibold))
+                        .foregroundColor(Mono.C.text)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .font(Mono.T.mono(14, .medium))
+                        .foregroundColor(Mono.C.textSec)
+                }
+            }
+            .confirmationDialog("Delete this transaction?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    store.deleteTransaction(id: transaction.id)
+                    Haptic.medium()
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $showEdit) {
+                EditTransactionView(transaction: transaction)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(Mono.C.bg)
+            }
+        }
+    }
+}
+
+struct DetailRow: View {
+    let icon: String
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: Mono.S.md) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Mono.C.textDim)
+                .frame(width: 18)
+
+            Text(label)
+                .font(Mono.T.mono(13, .regular))
+                .foregroundColor(Mono.C.textTert)
+
+            Spacer()
+
+            Text(value)
+                .font(Mono.T.mono(13, .medium))
+                .foregroundColor(Mono.C.textSec)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(Mono.S.md)
     }
 }

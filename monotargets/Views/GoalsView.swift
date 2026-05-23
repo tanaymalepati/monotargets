@@ -73,7 +73,7 @@ struct GoalsView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.trailing, Mono.S.lg)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 96)
                 }
             }
         }
