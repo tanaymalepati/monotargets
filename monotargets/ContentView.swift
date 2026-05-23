@@ -1,24 +1,17 @@
-//
-//  ContentView.swift
-//  monotargets
-//
-//  Created by Tanay M on 24/05/26.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        RootView()
+            .preferredColorScheme(.dark)
+            .tint(Mono.C.text)
     }
 }
 
 #Preview {
-    ContentView()
+    let store = AppStore()
+    store.transactions = Transaction.samples
+    store.savingsItems = SavingsItem.samples
+    return ContentView()
+        .environment(store)
 }
