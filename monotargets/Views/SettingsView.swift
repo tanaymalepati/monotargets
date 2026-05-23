@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var showRestorePicker = false
     @State private var backupStatus: BackupStatus = .idle
     @State private var appeared = false
+    @State private var liveBackupInfo: (count: Int, oldest: Date?, newest: Date?) = (0, nil, nil)
 
     enum BackupStatus: Equatable {
         case idle, success(String), error(String)
@@ -22,6 +23,22 @@ struct SettingsView: View {
             bookmarkDataIsStale: &isStale
         ) else { return nil }
         return url.lastPathComponent
+    }
+
+    private var lastBackupText: String {
+        guard let date = BackupService.shared.lastBackupDate else { return "Never" }
+        let cal = Calendar.current
+        if cal.isDateInToday(date) {
+            let fmt = DateFormatter()
+            fmt.dateFormat = "h:mm a"
+            return "Today, \(fmt.string(from: date))"
+        }
+        if cal.isDateInYesterday(date) {
+            let fmt = DateFormatter()
+            fmt.dateFormat = "h:mm a"
+            return "Yesterday, \(fmt.string(from: date))"
+        }
+        return VaultDateFormatter.display.string(from: date)
     }
 
     var body: some View {
@@ -58,11 +75,56 @@ struct SettingsView: View {
 
                         MonoDivider().padding(.horizontal, Mono.S.md)
 
+                        // Last backup row (non-tappable info row)
+                        HStack(spacing: Mono.S.md) {
+                            Image(systemName: "clock.fill")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(Mono.C.textSec)
+                                .frame(width: 22)
+                            Text("Last Backup")
+                                .font(Mono.T.mono(15, .medium))
+                                .foregroundColor(Mono.C.text)
+                            Spacer()
+                            Text(lastBackupText)
+                                .font(Mono.T.mono(13, .regular))
+                                .foregroundColor(BackupService.shared.lastBackupDate == nil ? Mono.C.textDim : Mono.C.textSec)
+                        }
+                        .padding(Mono.S.md)
+
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+
+                        // Backup count row
+                        HStack(spacing: Mono.S.md) {
+                            Image(systemName: "doc.on.doc.fill")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(Mono.C.textSec)
+                                .frame(width: 22)
+                            Text("Snapshots")
+                                .font(Mono.T.mono(15, .medium))
+                                .foregroundColor(Mono.C.text)
+                            Spacer()
+                            HStack(spacing: 4) {
+                                Text("\(liveBackupInfo.count)")
+                                    .font(Mono.T.mono(13, .semibold))
+                                    .foregroundColor(Mono.C.textSec)
+                                Text("/ \(BackupService.maxBackups)")
+                                    .font(Mono.T.mono(13, .regular))
+                                    .foregroundColor(Mono.C.textDim)
+                            }
+                        }
+                        .padding(Mono.S.md)
+
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+
                         SettingsRow(icon: "arrow.clockwise.circle.fill", label: "Backup Now") {
                             if case .success(let msg) = backupStatus {
                                 Text(msg)
                                     .font(Mono.T.mono(11, .regular))
                                     .foregroundColor(Mono.C.positive)
+                            } else if case .error(let msg) = backupStatus {
+                                Text(msg)
+                                    .font(Mono.T.mono(11, .regular))
+                                    .foregroundColor(Mono.C.negative)
                             }
                         } action: {
                             manualBackup()
@@ -150,6 +212,7 @@ struct SettingsView: View {
             withAnimation(.spring(duration: 0.6, bounce: 0.2).delay(0.05)) {
                 appeared = true
             }
+            refreshBackupInfo()
         }
         .sheet(isPresented: $showFolderPicker) {
             DocumentPicker(mode: .folder) { url in
@@ -178,6 +241,7 @@ struct SettingsView: View {
             store.setBackupFolder(bookmark: bookmark)
             backupStatus = .success("Folder set ✓")
             Haptic.success()
+            refreshBackupInfo()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { backupStatus = .idle }
         }
     }
@@ -206,7 +270,12 @@ struct SettingsView: View {
         BackupService.shared.triggerBackup(store: store)
         backupStatus = .success("Backed up!")
         Haptic.success()
+        refreshBackupInfo()
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { backupStatus = .idle }
+    }
+
+    private func refreshBackupInfo() {
+        liveBackupInfo = BackupService.shared.liveBackupInfo(bookmark: store.backupFolderBookmark)
     }
 }
 
