@@ -54,14 +54,14 @@ enum Mono {
         static let xxxl: CGFloat = 64
     }
 
-    // MARK: - Radius
+    // MARK: - Radius  (squircle — .continuous style + tighter radii)
     enum R {
-        static let card:   CGFloat = 26
-        static let inner:  CGFloat = 18
-        static let button: CGFloat = 16
+        static let card:   CGFloat = 16
+        static let inner:  CGFloat = 12
+        static let button: CGFloat = 10
         static let pill:   CGFloat = 100
-        static let icon:   CGFloat = 14
-        static let small:  CGFloat = 10
+        static let icon:   CGFloat = 10
+        static let small:  CGFloat = 7
     }
 
     // MARK: - Gradients

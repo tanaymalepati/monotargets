@@ -355,7 +355,9 @@ struct EmptyStateCard: View {
 // MARK: - Transaction Row
 
 struct TransactionRowView: View {
+    @Environment(AppStore.self) private var store
     let transaction: Transaction
+    @State private var showEdit = false
 
     var body: some View {
         HStack(spacing: Mono.S.md) {
@@ -395,5 +397,35 @@ struct TransactionRowView: View {
             }
         }
         .padding(.vertical, Mono.S.sm)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showEdit = true
+            Haptic.light()
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                    store.deleteTransaction(id: transaction.id)
+                }
+                Haptic.medium()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button {
+                showEdit = true
+                Haptic.light()
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(Mono.C.surfaceTop)
+        }
+        .sheet(isPresented: $showEdit) {
+            EditTransactionView(transaction: transaction)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Mono.C.bg)
+        }
     }
 }
