@@ -436,120 +436,136 @@ struct TransactionDetailSheet: View {
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
 
+    private var amountColor: Color {
+        transaction.type.isDebit ? Mono.C.negative : Mono.C.positive
+    }
+
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Mono.C.bg.ignoresSafeArea()
+        VStack(spacing: 0) {
 
-                VStack(spacing: Mono.S.lg) {
+            // ── Drag handle
+            Capsule()
+                .fill(Mono.C.borderBright)
+                .frame(width: 36, height: 4)
+                .padding(.top, 14)
+                .padding(.bottom, Mono.S.md)
 
-                    // Amount hero
-                    VStack(spacing: 8) {
-                        ZStack {
-                            Circle()
-                                .fill(Mono.C.surfaceUp)
-                                .frame(width: 56, height: 56)
-                            Image(systemName: transaction.type.symbol)
-                                .font(.system(size: 22, weight: .medium))
-                                .foregroundColor(
-                                    transaction.type == .inward ? Mono.C.positive : Mono.C.negative
-                                )
-                        }
-
-                        HStack(alignment: .lastTextBaseline, spacing: 4) {
-                            Text(transaction.type.isDebit ? "-₹" : "+₹")
-                                .font(Mono.T.mono(20, .semibold))
-                                .foregroundColor(Mono.C.textTert)
-                            Text(transaction.amount.indianFormattedNoSymbol)
-                                .font(Mono.T.mono(40, .bold))
-                                .foregroundColor(transaction.type.isDebit ? Mono.C.negative : Mono.C.positive)
-                        }
-
-                        Text(transaction.type.label.uppercased())
-                            .font(Mono.T.overline)
-                            .foregroundColor(Mono.C.textDim)
-                            .tracking(2)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Mono.S.lg)
-                    .monoCard()
-                    .padding(.horizontal, Mono.S.md)
-
-                    // Meta info
-                    VStack(spacing: 1) {
-                        DetailRow(icon: "text.alignleft", label: "Note",
-                                  value: transaction.note.isEmpty ? "—" : transaction.note)
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-                        DetailRow(icon: "calendar", label: "Date",
-                                  value: VaultDateFormatter.full.string(from: transaction.date))
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-                        DetailRow(icon: "number", label: "ID",
-                                  value: String(transaction.id.uuidString.prefix(8)).uppercased())
-                    }
-                    .monoCard()
-                    .padding(.horizontal, Mono.S.md)
-
-                    Spacer()
-
-                    // Actions
-                    VStack(spacing: 10) {
-                        Button {
-                            showEdit = true
-                            Haptic.medium()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "pencil.circle.fill")
-                                    .font(.system(size: 15))
-                                Text("Edit Transaction")
-                                    .font(Mono.T.mono(15, .semibold))
-                            }
-                            .foregroundColor(Mono.C.bg)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
-                            .background(
-                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                                    .fill(Mono.C.text)
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-                        DangerButton(icon: "trash", label: "Delete Transaction") {
-                            showDeleteConfirm = true
-                        }
-                    }
-                    .padding(.horizontal, Mono.S.md)
-                    .padding(.bottom, Mono.S.lg)
-                }
-                .padding(.top, Mono.S.lg)
+            // ── Header row
+            HStack {
+                Text("Transaction")
+                    .font(Mono.T.mono(15, .semibold))
+                    .foregroundColor(Mono.C.text)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .font(Mono.T.mono(14, .medium))
+                    .foregroundColor(Mono.C.textSec)
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Transaction")
-                        .font(Mono.T.mono(15, .semibold))
-                        .foregroundColor(Mono.C.text)
+            .padding(.horizontal, Mono.S.lg)
+            .padding(.bottom, Mono.S.lg)
+
+            // ── Amount hero card
+            VStack(spacing: 10) {
+                // Type badge
+                HStack(spacing: 6) {
+                    Image(systemName: transaction.type.symbol)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(amountColor)
+                    Text(transaction.type.label.uppercased())
+                        .font(Mono.T.overline)
+                        .foregroundColor(Mono.C.textDim)
+                        .tracking(2)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .font(Mono.T.mono(14, .medium))
-                        .foregroundColor(Mono.C.textSec)
+
+                // Large amount
+                HStack(alignment: .lastTextBaseline, spacing: 2) {
+                    Text(transaction.type.isDebit ? "-₹" : "+₹")
+                        .font(Mono.T.mono(22, .medium))
+                        .foregroundColor(amountColor.opacity(0.55))
+                    Text(transaction.amount.indianFormattedNoSymbol)
+                        .font(Mono.T.mono(46, .bold))
+                        .foregroundColor(amountColor)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
                 }
             }
-            .confirmationDialog("Delete this transaction?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    store.deleteTransaction(id: transaction.id)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Mono.S.lg)
+            .monoCard(elevated: true)
+            .padding(.horizontal, Mono.S.md)
+
+            // ── Meta rows
+            VStack(spacing: 0) {
+                DetailRow(
+                    icon: "text.alignleft",
+                    label: "Note",
+                    value: transaction.note.isEmpty ? "—" : transaction.note
+                )
+                MonoDivider().padding(.horizontal, Mono.S.md)
+                DetailRow(
+                    icon: "calendar",
+                    label: "Date",
+                    value: VaultDateFormatter.full.string(from: transaction.date)
+                )
+                MonoDivider().padding(.horizontal, Mono.S.md)
+                DetailRow(
+                    icon: "number",
+                    label: "ID",
+                    value: String(transaction.id.uuidString.prefix(8)).uppercased()
+                )
+            }
+            .monoCard()
+            .padding(.horizontal, Mono.S.md)
+            .padding(.top, Mono.S.md)
+
+            Spacer(minLength: Mono.S.lg)
+
+            // ── Action buttons
+            VStack(spacing: 8) {
+                Button {
+                    showEdit = true
                     Haptic.medium()
-                    dismiss()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.system(size: 15))
+                        Text("Edit Transaction")
+                            .font(Mono.T.mono(15, .semibold))
+                    }
+                    .foregroundColor(Mono.C.bg)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(
+                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                            .fill(Mono.C.text)
+                    )
                 }
-                Button("Cancel", role: .cancel) {}
+                .buttonStyle(.plain)
+
+                DangerButton(icon: "trash", label: "Delete Transaction") {
+                    showDeleteConfirm = true
+                }
             }
-            .sheet(isPresented: $showEdit) {
-                EditTransactionView(transaction: transaction)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .presentationBackground(Mono.C.bg)
+            .padding(.horizontal, Mono.S.md)
+            .padding(.bottom, Mono.S.xl)
+        }
+        .background(Mono.C.bg.ignoresSafeArea())
+        .confirmationDialog(
+            "Delete this transaction?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                store.deleteTransaction(id: transaction.id)
+                Haptic.medium()
+                dismiss()
             }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showEdit) {
+            EditTransactionView(transaction: transaction)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Mono.C.bg)
         }
     }
 }
