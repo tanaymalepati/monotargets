@@ -55,6 +55,14 @@ struct Transaction: Identifiable, Codable, Hashable {
             }
         }
 
+        // Semantic color: red = money leaving goals or wallet; green = money entering
+        var isRedAction: Bool {
+            switch self {
+            case .outward, .unassign: return true
+            case .inward, .assign:    return false
+            }
+        }
+
         var affectsBalance: Bool {
             switch self {
             case .inward, .outward: return true

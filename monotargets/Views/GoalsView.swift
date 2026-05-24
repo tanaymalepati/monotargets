@@ -6,6 +6,9 @@ struct GoalsView: View {
     @State private var selectedItem: SavingsItem?
     @State private var appeared = false
 
+    private var inProgressItems: [SavingsItem] { store.savingsItems.filter { !$0.isFullyFunded } }
+    private var fundedItems: [SavingsItem]     { store.savingsItems.filter { $0.isFullyFunded } }
+
     var body: some View {
         ZStack {
             Mono.C.bg.ignoresSafeArea()
@@ -28,17 +31,44 @@ struct GoalsView: View {
                         .padding(.horizontal, Mono.S.md)
                         .padding(.top, Mono.S.xl)
                     } else {
-                        ForEach(Array(store.savingsItems.enumerated()), id: \.element.id) { index, item in
-                            GoalCard(item: item) {
-                                selectedItem = item
+                        // In-progress goals
+                        ForEach(Array(inProgressItems.enumerated()), id: \.element.id) { index, item in
+                            GoalCard(item: item) { selectedItem = item }
+                                .padding(.horizontal, Mono.S.md)
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 24 + CGFloat(index * 8))
+                                .animation(
+                                    .spring(duration: 0.5, bounce: 0.3).delay(0.1 + Double(index) * 0.07),
+                                    value: appeared
+                                )
+                        }
+
+                        // Separator between in-progress and funded
+                        if !fundedItems.isEmpty && !inProgressItems.isEmpty {
+                            HStack(spacing: Mono.S.sm) {
+                                Rectangle()
+                                    .fill(Mono.C.border)
+                                    .frame(height: 0.5)
+                                OverlineLabel(text: "Funded", opacity: 0.35)
+                                Rectangle()
+                                    .fill(Mono.C.border)
+                                    .frame(height: 0.5)
                             }
                             .padding(.horizontal, Mono.S.md)
                             .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 24 + CGFloat(index * 8))
-                            .animation(
-                                .spring(duration: 0.5, bounce: 0.3).delay(0.1 + Double(index) * 0.07),
-                                value: appeared
-                            )
+                        }
+
+                        // Funded goals
+                        ForEach(Array(fundedItems.enumerated()), id: \.element.id) { index, item in
+                            GoalCard(item: item) { selectedItem = item }
+                                .padding(.horizontal, Mono.S.md)
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 24 + CGFloat(index * 8))
+                                .animation(
+                                    .spring(duration: 0.5, bounce: 0.3)
+                                        .delay(0.1 + Double(index + inProgressItems.count) * 0.07),
+                                    value: appeared
+                                )
                         }
                     }
 
@@ -151,8 +181,6 @@ struct GoalCard: View {
     let item: SavingsItem
     let onTap: () -> Void
 
-    @State private var pressed = false
-
     var body: some View {
         Button(action: {
             onTap()
@@ -254,19 +282,15 @@ struct GoalCard: View {
             }
             .padding(Mono.S.lg)
             .monoCard(elevated: true)
-            .scaleEffect(pressed ? 0.97 : 1.0)
         }
-        .buttonStyle(.plain)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !pressed {
-                        withAnimation(.spring(duration: 0.12, bounce: 0.4)) { pressed = true }
-                    }
-                }
-                .onEnded { _ in
-                    withAnimation(.spring(duration: 0.25, bounce: 0.5)) { pressed = false }
-                }
-        )
+        .buttonStyle(CardPressStyle())
+    }
+}
+
+struct CardPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.spring(duration: 0.18, bounce: 0.4), value: configuration.isPressed)
     }
 }

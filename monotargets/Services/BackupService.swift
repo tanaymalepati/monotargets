@@ -5,8 +5,9 @@ final class BackupService {
     private init() {}
 
     static let maxBackups = 10
-    private let lastBackupKey = "vault_lastBackupDate"
-    private let backupCountKey = "vault_backupCount"
+    private let lastBackupKey   = "vault_lastBackupDate"
+    private let backupCountKey  = "vault_backupCount"
+    private let backupIndexKey  = "vault_backupIndex"   // ever-increasing counter
 
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -15,7 +16,20 @@ final class BackupService {
         return e
     }()
 
-    // MARK: - Last backup info (stored in UserDefaults, readable without folder access)
+    // MARK: - Persistent counter
+
+    /// The next index to use for a new backup file.
+    private var nextIndex: Int {
+        UserDefaults.standard.integer(forKey: backupIndexKey)
+    }
+
+    private func consumeNextIndex() -> Int {
+        let idx = nextIndex
+        UserDefaults.standard.set(idx + 1, forKey: backupIndexKey)
+        return idx
+    }
+
+    // MARK: - Last backup info (UserDefaults, no folder access needed)
 
     var lastBackupDate: Date? {
         UserDefaults.standard.object(forKey: lastBackupKey) as? Date
@@ -52,18 +66,13 @@ final class BackupService {
         // ── 1. Rotate: delete oldest backups if at or above the limit
         pruneOldBackups(in: folderURL)
 
-        // ── 2. Write timestamped snapshot
-        let timestamp = VaultDateFormatter.backupTimestamp.string(from: Date())
-        let snapshotURL = folderURL.appendingPathComponent("vault_backup_\(timestamp).json")
+        // ── 2. Write numbered snapshot (number always increases)
+        let idx = consumeNextIndex()
+        let snapshotURL = folderURL.appendingPathComponent("vault_backup_\(idx).json")
         try? data.write(to: snapshotURL, options: .atomic)
 
-        // ── 3. Overwrite the always-fresh "latest" file
-        let latestURL = folderURL.appendingPathComponent("vault_latest.json")
-        try? data.write(to: latestURL, options: .atomic)
-
-        // ── 4. Record the backup date and updated count
-        let now = Date()
-        UserDefaults.standard.set(now, forKey: lastBackupKey)
+        // ── 3. Record the backup date and updated count
+        UserDefaults.standard.set(Date(), forKey: lastBackupKey)
         let newCount = backupFileCount(in: folderURL)
         UserDefaults.standard.set(newCount, forKey: backupCountKey)
     }
@@ -73,14 +82,14 @@ final class BackupService {
     private func pruneOldBackups(in folderURL: URL) {
         let files = backupFiles(in: folderURL)
         guard files.count >= Self.maxBackups else { return }
-        // Delete oldest files (name sort = chronological because of YYYYMMDD_HHMMSS format)
+        // Delete lowest-numbered files (oldest), keeping room for the one about to be written
         let toDelete = files.prefix(files.count - Self.maxBackups + 1)
         for url in toDelete {
             try? FileManager.default.removeItem(at: url)
         }
     }
 
-    /// Returns timestamped backup files sorted oldest → newest.
+    /// Returns backup files sorted oldest → newest (lowest number first).
     private func backupFiles(in folderURL: URL) -> [URL] {
         let all = (try? FileManager.default.contentsOfDirectory(
             at: folderURL,
@@ -88,8 +97,17 @@ final class BackupService {
             options: .skipsHiddenFiles
         )) ?? []
         return all
-            .filter { $0.lastPathComponent.hasPrefix("vault_backup_") && $0.pathExtension == "json" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .compactMap { url -> (URL, Int)? in
+                let stem = url.deletingPathExtension().lastPathComponent
+                guard
+                    url.pathExtension == "json",
+                    stem.hasPrefix("vault_backup_"),
+                    let n = Int(stem.dropFirst("vault_backup_".count))
+                else { return nil }
+                return (url, n)
+            }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
     }
 
     private func backupFileCount(in folderURL: URL) -> Int {

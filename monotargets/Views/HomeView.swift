@@ -6,36 +6,43 @@ struct HomeView: View {
     @State private var balanceScale: CGFloat = 0.85
     @State private var balanceOpacity: Double = 0
     @State private var cardsOffset: CGFloat = 30
+    @State private var selectedGoal: SavingsItem?
+    @Namespace private var zoomNamespace
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Background
             Mono.C.bg.ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: Mono.S.lg) {
-                    // Balance hero card
                     BalanceHeroCard()
                         .scaleEffect(balanceScale)
                         .opacity(balanceOpacity)
                         .padding(.horizontal, Mono.S.md)
                         .padding(.top, Mono.S.sm)
 
-                    // Goals horizontal scroll
-                    if !store.savingsItems.isEmpty {
-                        GoalsScrollSection()
-                            .offset(y: cardsOffset)
-                            .opacity(cardsOffset == 0 ? 1 : 0)
-                    }
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.clear, Mono.C.borderBright.opacity(0.55), .clear],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 1)
+                        .opacity(balanceOpacity)
 
-                    // Recent transactions
-                    RecentTransactionsSection()
+                    FavoriteGoalsSection(namespace: zoomNamespace) { selectedGoal = $0 }
                         .offset(y: cardsOffset)
                         .opacity(cardsOffset == 0 ? 1 : 0)
 
                     Spacer(minLength: 100)
                 }
             }
+        }
+        .navigationDestination(item: $selectedGoal) { item in
+            GoalDetailView(itemID: item.id)
+                .navigationTransition(.zoom(sourceID: item.id, in: zoomNamespace))
         }
         .onAppear {
             withAnimation(.spring(duration: 0.7, bounce: 0.35).delay(0.1)) {
@@ -187,90 +194,149 @@ struct MiniStat: View {
     }
 }
 
-// MARK: - Goals Horizontal Scroll
+// MARK: - Favourite Goals Section
 
-struct GoalsScrollSection: View {
+struct FavoriteGoalsSection: View {
     @Environment(AppStore.self) private var store
+    let namespace: Namespace.ID
+    let onNavigate: (SavingsItem) -> Void
+
+    private var favorites: [SavingsItem] {
+        store.savingsItems.filter { $0.isFavorite }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Mono.S.md) {
             HStack {
-                OverlineLabel(text: "Savings Goals", opacity: 0.5)
+                OverlineLabel(text: "Pinned Goals", opacity: 0.5)
                 Spacer()
-                Text("\(store.savingsItems.count) goals")
-                    .font(Mono.T.label)
-                    .foregroundColor(Mono.C.textDim)
+                if !favorites.isEmpty {
+                    Text("\(favorites.count) pinned")
+                        .font(Mono.T.label)
+                        .foregroundColor(Mono.C.textDim)
+                }
             }
             .padding(.horizontal, Mono.S.md)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(Array(store.savingsItems.prefix(6).enumerated()), id: \.element.id) { index, item in
-                        GoalMiniCard(item: item)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                            .animation(.spring(duration: 0.4, bounce: 0.3).delay(Double(index) * 0.06), value: store.savingsItems.count)
+            if favorites.isEmpty {
+                VStack(spacing: Mono.S.sm) {
+                    Image(systemName: "star")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundColor(Mono.C.textDim)
+                    Text("No pinned goals")
+                        .font(Mono.T.mono(14, .medium))
+                        .foregroundColor(Mono.C.textSec)
+                    Text("Tap ★ on any goal to pin it here")
+                        .font(Mono.T.caption)
+                        .foregroundColor(Mono.C.textTert)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Mono.S.xxl)
+                .monoCard()
+                .padding(.horizontal, Mono.S.md)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(Array(favorites.enumerated()), id: \.element.id) { index, item in
+                        FavoriteGoalCard(item: item, namespace: namespace) { onNavigate(item) }
+                            .padding(.horizontal, Mono.S.md)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .animation(
+                                .spring(duration: 0.4, bounce: 0.3).delay(Double(index) * 0.06),
+                                value: favorites.count
+                            )
                     }
                 }
-                .padding(.horizontal, Mono.S.md)
-                .padding(.vertical, 4)
             }
         }
     }
 }
 
-struct GoalMiniCard: View {
+struct FavoriteGoalCard: View {
     let item: SavingsItem
-    @State private var appeared = false
+    let namespace: Namespace.ID
+    let onOpen: () -> Void
+
+    @AppStorage("vault_monochrome") private var isMonochrome = false
+    @State private var holdProgress: Double = 0
+    @State private var showHoldRing: Bool = false
+    @State private var jitterWork: DispatchWorkItem?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 0) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: Mono.R.icon, style: .continuous)
-                        .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceTop)
-                        .frame(width: 38, height: 38)
-
-                    Image(systemName: item.icon)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
-                }
-
-                Spacer()
-
-                ProgressRing(progress: item.progress, size: 34, lineWidth: 2.5)
+        HStack(spacing: Mono.S.md) {
+            ZStack {
+                RoundedRectangle(cornerRadius: Mono.R.icon, style: .continuous)
+                    .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceTop)
+                    .frame(width: 44, height: 44)
+                Image(systemName: item.icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(item.name)
-                    .font(Mono.T.mono(13, .semibold))
+                    .font(Mono.T.mono(14, .semibold))
                     .foregroundColor(Mono.C.text)
                     .lineLimit(1)
+                MonoProgressBar(progress: item.progress, height: 3)
+            }
 
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(item.progress * 100))%")
+                    .font(Mono.T.mono(14, .semibold))
+                    .foregroundColor(Mono.C.textSec)
                 Text(item.assignedAmount.indianFormattedCompact)
                     .font(Mono.T.mono(11, .regular))
                     .foregroundColor(Mono.C.textTert)
             }
 
-            // Progress bar
-            MonoProgressBar(progress: item.progress, height: 3)
-
-            if let targetDate = item.targetDate {
-                let days = item.daysUntilTarget ?? 0
-                Text(days >= 0 ? "\(VaultDateFormatter.daysRemaining(targetDate)) left" : "Overdue")
-                    .font(Mono.T.mono(10, .medium))
-                    .foregroundColor(days < 0 ? Mono.C.negative : Mono.C.textDim)
+            if showHoldRing {
+                ZStack {
+                    Circle()
+                        .stroke(Mono.C.surfaceTop, lineWidth: 3)
+                    Circle()
+                        .trim(from: 0, to: holdProgress)
+                        .stroke(
+                            isMonochrome ? Mono.C.text : Mono.C.accent,
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 28, height: 28)
+                .transition(.scale(scale: 0.4).combined(with: .opacity))
             }
         }
         .padding(Mono.S.md)
-        .frame(width: 150)
         .monoCard(elevated: true)
-        .scaleEffect(appeared ? 1.0 : 0.88)
-        .opacity(appeared ? 1.0 : 0)
-        .onAppear {
-            withAnimation(.spring(duration: 0.5, bounce: 0.4)) {
-                appeared = true
+        .matchedTransitionSource(id: item.id, in: namespace)
+        .onLongPressGesture(minimumDuration: 1.0, pressing: { isPressing in
+            if isPressing {
+                withAnimation(.spring(duration: 0.25, bounce: 0.3)) { showHoldRing = true }
+                withAnimation(.linear(duration: 0.95)) { holdProgress = 1.0 }
+                let work = DispatchWorkItem {
+                    Haptic.light()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { Haptic.medium() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) { Haptic.light() }
+                }
+                jitterWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+            } else {
+                jitterWork?.cancel()
+                jitterWork = nil
+                withAnimation(.spring(duration: 0.3)) {
+                    holdProgress = 0.0
+                    showHoldRing = false
+                }
             }
-        }
+        }, perform: {
+            jitterWork?.cancel()
+            jitterWork = nil
+            holdProgress = 0
+            showHoldRing = false
+            onOpen()
+            Haptic.success()
+        })
     }
 }
 
@@ -356,6 +422,7 @@ struct EmptyStateCard: View {
 
 struct TransactionRowView: View {
     @Environment(AppStore.self) private var store
+    @AppStorage("vault_monochrome") private var isMonochrome = false
     let transaction: Transaction
     @State private var showDetail = false
 
@@ -369,7 +436,15 @@ struct TransactionRowView: View {
                 Image(systemName: transaction.type.symbol)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(
-                        transaction.type == .inward ? Mono.C.positive : Mono.C.negative
+                        transaction.type.isRedAction
+                            ? (isMonochrome ? Mono.C.negative : Mono.C.red)
+                            : (isMonochrome ? Mono.C.positive : Mono.C.accent)
+                    )
+                    .shadow(
+                        color: !isMonochrome
+                            ? (transaction.type.isRedAction ? Mono.C.red.opacity(0.6) : Mono.C.accent.opacity(0.5))
+                            : .clear,
+                        radius: 6, x: 0, y: 0
                     )
             }
 
@@ -387,9 +462,19 @@ struct TransactionRowView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text((transaction.type.isDebit ? "-" : "+") + transaction.amount.indianFormattedNoSymbol)
+                Text((transaction.type.isRedAction ? "-" : "+") + transaction.amount.indianFormattedNoSymbol)
                     .font(Mono.T.mono(15, .semibold))
-                    .foregroundColor(transaction.type.isDebit ? Mono.C.negative : Mono.C.positive)
+                    .foregroundColor(
+                        transaction.type.isRedAction
+                            ? (isMonochrome ? Mono.C.negative : Mono.C.red)
+                            : (isMonochrome ? Mono.C.positive : Mono.C.accent)
+                    )
+                    .shadow(
+                        color: !isMonochrome
+                            ? (transaction.type.isRedAction ? Mono.C.red.opacity(0.5) : Mono.C.accent.opacity(0.4))
+                            : .clear,
+                        radius: 6, x: 0, y: 0
+                    )
 
                 Text("₹")
                     .font(Mono.T.mono(10, .medium))
@@ -432,12 +517,16 @@ struct TransactionDetailSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    @AppStorage("vault_monochrome") private var isMonochrome = false
+
     let transaction: Transaction
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
 
     private var amountColor: Color {
-        transaction.type.isDebit ? Mono.C.negative : Mono.C.positive
+        transaction.type.isRedAction
+            ? (isMonochrome ? Mono.C.negative : Mono.C.red)
+            : (isMonochrome ? Mono.C.positive : Mono.C.accent)
     }
 
     var body: some View {
@@ -478,7 +567,7 @@ struct TransactionDetailSheet: View {
 
                 // Large amount
                 HStack(alignment: .lastTextBaseline, spacing: 2) {
-                    Text(transaction.type.isDebit ? "-₹" : "+₹")
+                    Text(transaction.type.isRedAction ? "-₹" : "+₹")
                         .font(Mono.T.mono(22, .medium))
                         .foregroundColor(amountColor.opacity(0.55))
                     Text(transaction.amount.indianFormattedNoSymbol)
@@ -486,6 +575,10 @@ struct TransactionDetailSheet: View {
                         .foregroundColor(amountColor)
                         .minimumScaleFactor(0.6)
                         .lineLimit(1)
+                        .shadow(
+                            color: !isMonochrome ? amountColor.opacity(0.65) : .clear,
+                            radius: 18, x: 0, y: 0
+                        )
                 }
             }
             .frame(maxWidth: .infinity)

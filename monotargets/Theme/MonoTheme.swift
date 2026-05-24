@@ -19,7 +19,8 @@ enum Mono {
 
         static let positive    = Color(white: 0.96)
         static let negative    = Color(white: 0.48)
-        static let accent      = Color.white
+        static let accent      = Color(red: 0, green: 1.0, blue: 193.0/255.0)
+        static let red         = Color(red: 1.0, green: 0, blue: 100.0/255.0)
     }
 
     // MARK: - Typography
@@ -87,7 +88,7 @@ enum Mono {
             startPoint: .leading, endPoint: .trailing
         )
         static let progressFill = LinearGradient(
-            colors: [Color(white: 0.95), Color(white: 0.72)],
+            colors: [Color(red: 0, green: 1.0, blue: 193.0/255.0), Color(red: 0, green: 0.85, blue: 163.0/255.0)],
             startPoint: .leading, endPoint: .trailing
         )
     }

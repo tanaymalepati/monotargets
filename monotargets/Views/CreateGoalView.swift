@@ -52,6 +52,7 @@ struct CreateGoalView: View {
                                         }
                                     }
                             }
+                            .padding(.horizontal, Mono.S.lg)
                             .scaleEffect(nameScale)
                         }
                         .frame(maxWidth: .infinity)

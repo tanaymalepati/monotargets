@@ -25,8 +25,8 @@ let vaultIconCategories: [IconCategory] = [
         "network", "externaldrive.fill", "server.rack"
     ]),
     IconCategory(name: "Transport", symbols: [
-        "car.fill", "car.side.fill", "bicycle", "scooter", "airplane",
-        "airplane.departure", "airplane.arrival", "bus.fill", "tram.fill",
+        "car.fill", "car.side.fill", "bicycle", "scooter", "motorcycle",
+        "airplane", "airplane.departure", "airplane.arrival", "bus.fill", "tram.fill",
         "ferry.fill", "fuelpump.fill", "parkingsign", "road.lanes",
         "bolt.car.fill", "map.fill", "location.fill", "figure.walk",
         "globe.americas.fill", "sailboat.fill", "car.front.waves.up.fill"
@@ -71,6 +71,18 @@ let vaultIconCategories: [IconCategory] = [
         "binoculars.fill", "flag.fill", "beach.umbrella.fill",
         "tent.2.fill", "map.fill", "globe", "building.2.crop.circle.fill",
         "suitcase.fill", "figure.hiking", "photo.on.rectangle.angled"
+    ]),
+    IconCategory(name: "Fashion", symbols: [
+        "tshirt", "tshirt.fill",
+        "figure.dress.line.vertical.figure",
+        "shoe.fill", "shoe.2",
+        "handbag.fill", "bag.fill", "bag.badge.plus",
+        "backpack.fill", "suitcase.fill",
+        "tag.fill", "tag.circle.fill",
+        "scissors", "eyeglasses", "sunglasses",
+        "crown.fill", "diamond.fill",
+        "gift.fill", "sparkles", "wand.and.sparkles",
+        "watch.analog", "applewatch"
     ]),
     IconCategory(name: "Goals", symbols: [
         "target", "scope", "flag.checkered", "checkmark.seal.fill",

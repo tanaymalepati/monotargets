@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct AssignFundsView: View {
+struct UnassignFundsView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
@@ -12,8 +12,8 @@ struct AssignFundsView: View {
     @State private var showSuccess = false
 
     private var amount: Double { AmountFormatter.toDoubleFromDigits(digits) }
-    private var isValid: Bool  { amount > 0 && amount <= store.totalUnassigned }
-    private var overflows: Bool { amount > store.totalUnassigned }
+    private var isValid: Bool  { amount > 0 && amount <= item.assignedAmount }
+    private var overflows: Bool { amount > item.assignedAmount }
 
     var body: some View {
         ZStack {
@@ -36,14 +36,14 @@ struct AssignFundsView: View {
 
                     Spacer()
 
-                    Text("Assign Funds")
+                    Text("Unassign Funds")
                         .font(Mono.T.mono(15, .semibold))
                         .foregroundColor(Mono.C.text)
 
                     Spacer()
 
-                    // Balance available (right-aligned, mirrors Cancel width)
-                    Text(store.totalUnassigned.indianFormattedCompact)
+                    // Currently assigned (mirrors Cancel width)
+                    Text(item.assignedAmount.indianFormattedCompact)
                         .font(Mono.T.mono(14, .semibold))
                         .foregroundColor(Mono.C.textSec)
                         .frame(minWidth: 44, alignment: .trailing)
@@ -71,7 +71,7 @@ struct AssignFundsView: View {
                             .font(Mono.T.mono(15, .semibold))
                             .foregroundColor(Mono.C.text)
                             .lineLimit(1)
-                        Text("\(item.assignedAmount.indianFormattedCompact) of \(item.targetAmount.indianFormattedCompact)")
+                        Text("\(item.assignedAmount.indianFormattedCompact) currently assigned")
                             .font(Mono.T.mono(11, .regular))
                             .foregroundColor(Mono.C.textTert)
                     }
@@ -100,7 +100,7 @@ struct AssignFundsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 11, weight: .medium))
-                        Text("Exceeds available balance")
+                        Text("Exceeds assigned amount")
                             .font(Mono.T.mono(12, .regular))
                     }
                     .foregroundColor(Mono.C.negative)
@@ -108,23 +108,21 @@ struct AssignFundsView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
-                // ── Quick assign pills
-                let remaining  = item.remaining
-                let unassigned = store.totalUnassigned
-                let maxAmount  = min(remaining, unassigned)
+                // ── Quick pills
+                let assigned = item.assignedAmount
 
-                if maxAmount > 0 {
+                if assigned > 0 {
                     HStack(spacing: 8) {
-                        QuickAssignPill(label: "25%", amount: (maxAmount * 0.25).rounded()) {
-                            digits = String(Int((maxAmount * 0.25).rounded()))
+                        QuickAssignPill(label: "25%", amount: (assigned * 0.25).rounded()) {
+                            digits = String(Int((assigned * 0.25).rounded()))
                             Haptic.light()
                         }
-                        QuickAssignPill(label: "50%", amount: (maxAmount * 0.5).rounded()) {
-                            digits = String(Int((maxAmount * 0.5).rounded()))
+                        QuickAssignPill(label: "50%", amount: (assigned * 0.5).rounded()) {
+                            digits = String(Int((assigned * 0.5).rounded()))
                             Haptic.light()
                         }
-                        QuickAssignPill(label: "Max", amount: maxAmount) {
-                            digits = String(Int(maxAmount))
+                        QuickAssignPill(label: "All", amount: assigned) {
+                            digits = String(Int(assigned))
                             Haptic.light()
                         }
                     }
@@ -133,16 +131,16 @@ struct AssignFundsView: View {
                 }
 
                 // ── Numpad
-                MonoNumpad(digits: $digits, showConfirmKey: false) { commitAssign() }
+                MonoNumpad(digits: $digits, showConfirmKey: false) { commitUnassign() }
                     .padding(.horizontal, Mono.S.md)
                     .padding(.top, Mono.S.xs)
 
                 // ── Confirm button
-                Button(action: commitAssign) {
+                Button(action: commitUnassign) {
                     HStack(spacing: 8) {
-                        Image(systemName: "arrow.right.circle.fill")
+                        Image(systemName: "arrow.left.circle.fill")
                             .font(.system(size: 15))
-                        Text(amount > 0 ? "Assign \(amount.indianFormattedCompact)" : "Assign Funds")
+                        Text(amount > 0 ? "Unassign \(amount.indianFormattedCompact)" : "Unassign Funds")
                             .font(Mono.T.mono(15, .semibold))
                     }
                     .foregroundColor(isValid ? Mono.C.bg : Mono.C.textDim)
@@ -150,11 +148,7 @@ struct AssignFundsView: View {
                     .padding(.vertical, 15)
                     .background(
                         RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                            .fill(isValid ? (isMonochrome ? Mono.C.text : Mono.C.accent) : Mono.C.surfaceUp)
-                            .shadow(
-                                color: (isValid && !isMonochrome) ? Mono.C.accent.opacity(0.5) : .clear,
-                                radius: 14, x: 0, y: 0
-                            )
+                            .fill(isValid ? Mono.C.text : Mono.C.surfaceUp)
                     )
                     .animation(.spring(duration: 0.25, bounce: 0.2), value: isValid)
                 }
@@ -173,43 +167,11 @@ struct AssignFundsView: View {
         .animation(.spring(duration: 0.25, bounce: 0.2), value: overflows)
     }
 
-    private func commitAssign() {
+    private func commitUnassign() {
         guard isValid else { Haptic.error(); return }
-        store.assignFunds(to: item.id, amount: amount)
+        store.unassignFunds(from: item.id, amount: amount)
         Haptic.success()
         withAnimation(.spring(duration: 0.4, bounce: 0.3)) { showSuccess = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { dismiss() }
-    }
-}
-
-// MARK: - Quick Assign Pill
-
-struct QuickAssignPill: View {
-    let label: String
-    let amount: Double
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Text(label)
-                    .font(Mono.T.mono(12, .semibold))
-                    .foregroundColor(Mono.C.text)
-                Text(amount.indianFormattedCompact)
-                    .font(Mono.T.mono(10, .regular))
-                    .foregroundColor(Mono.C.textTert)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                    .fill(Mono.C.surfaceTop)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                            .strokeBorder(Mono.C.border, lineWidth: 0.5)
-                    )
-            )
-        }
-        .buttonStyle(.plain)
     }
 }

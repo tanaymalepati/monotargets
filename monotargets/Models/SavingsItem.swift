@@ -11,6 +11,7 @@ struct SavingsItem: Identifiable, Codable, Hashable {
     var targetDate: Date?
     var isCompleted: Bool
     var sortOrder: Int
+    var isFavorite: Bool
 
     init(
         id: UUID = UUID(),
@@ -22,7 +23,8 @@ struct SavingsItem: Identifiable, Codable, Hashable {
         assignedAmount: Double = 0,
         targetDate: Date? = nil,
         isCompleted: Bool = false,
-        sortOrder: Int = 0
+        sortOrder: Int = 0,
+        isFavorite: Bool = false
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -34,6 +36,22 @@ struct SavingsItem: Identifiable, Codable, Hashable {
         self.targetDate = targetDate
         self.isCompleted = isCompleted
         self.sortOrder = sortOrder
+        self.isFavorite = isFavorite
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id             = try c.decode(UUID.self,   forKey: .id)
+        createdAt      = try c.decode(Date.self,   forKey: .createdAt)
+        name           = try c.decode(String.self, forKey: .name)
+        itemDescription = try c.decode(String.self, forKey: .itemDescription)
+        icon           = try c.decode(String.self, forKey: .icon)
+        targetAmount   = try c.decode(Double.self, forKey: .targetAmount)
+        assignedAmount = try c.decode(Double.self, forKey: .assignedAmount)
+        targetDate     = try c.decodeIfPresent(Date.self, forKey: .targetDate)
+        isCompleted    = try c.decode(Bool.self,   forKey: .isCompleted)
+        sortOrder      = try c.decode(Int.self,    forKey: .sortOrder)
+        isFavorite     = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
     }
 
     var progress: Double {

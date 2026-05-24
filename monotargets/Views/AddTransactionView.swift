@@ -1,61 +1,88 @@
 import SwiftUI
 
-// MARK: - Pull-down Add Transaction Panel
+// MARK: - Add Transaction Sheet
 
 struct AddTransactionView: View {
     @Environment(AppStore.self) private var store
     @Binding var isPresented: Bool
 
+    @AppStorage("vault_monochrome") private var isMonochrome = false
+
     @State private var digits = ""
     @State private var type: Transaction.TransactionType = .inward
-    @State private var note = ""
     @State private var showSuccess = false
+
+    // Explicit state instead of a boolean so drag can push them live
+    @State private var panelOffset: CGFloat = 700
+    @State private var backdropOpacity: Double = 0
 
     private var amount: Double { AmountFormatter.toDoubleFromDigits(digits) }
     private var isValid: Bool { amount > 0 }
 
     var body: some View {
         ZStack {
-            // Backdrop
-            Color.black.opacity(0.7)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    dismissWithAnimation()
-                }
 
+            // ── Backdrop: fades independently from the panel
+            Color.black.opacity(backdropOpacity)
+                .ignoresSafeArea()
+                .onTapGesture { hide() }
+
+            // ── Bottom panel
             VStack(spacing: 0) {
+
                 // Drag handle
                 Capsule()
                     .fill(Mono.C.borderBright)
                     .frame(width: 36, height: 4)
                     .padding(.top, 12)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 18)
 
-                // Type selector
-                HStack(spacing: 0) {
-                    TypeTab(label: "Money In", icon: "arrow.down.circle.fill", isActive: type == .inward) {
-                        withAnimation(.spring(duration: 0.25, bounce: 0.3)) { type = .inward }
+                // Type selector — segmented pill
+                HStack(spacing: 4) {
+                    TypeTab(
+                        label: "Money In",
+                        icon: "arrow.down.circle.fill",
+                        isActive: type == .inward
+                    ) {
+                        withAnimation(.spring(duration: 0.28, bounce: 0.3)) { type = .inward }
                         Haptic.select()
                     }
-                    TypeTab(label: "Money Out", icon: "arrow.up.circle.fill", isActive: type == .outward) {
-                        withAnimation(.spring(duration: 0.25, bounce: 0.3)) { type = .outward }
+                    TypeTab(
+                        label: "Money Out",
+                        icon: "arrow.up.circle.fill",
+                        isActive: type == .outward
+                    ) {
+                        withAnimation(.spring(duration: 0.28, bounce: 0.3)) { type = .outward }
                         Haptic.select()
                     }
                 }
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: Mono.R.button + 2, style: .continuous)
+                        .fill(Mono.C.surfaceTop)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Mono.R.button + 2, style: .continuous)
+                                .strokeBorder(Mono.C.border.opacity(0.6), lineWidth: 0.5)
+                        )
+                )
                 .padding(.horizontal, Mono.S.md)
-                .padding(.bottom, Mono.S.xl)
+                .padding(.bottom, Mono.S.lg)
 
                 // Amount display
                 AmountInputField(digits: $digits, fontSize: 52)
+                    .shadow(
+                        color: (!isMonochrome && !digits.isEmpty) ? Mono.C.accent.opacity(0.45) : .clear,
+                        radius: 16, x: 0, y: 0
+                    )
                     .padding(.horizontal, Mono.S.xl)
-                    .padding(.bottom, Mono.S.lg)
+                    .padding(.bottom, Mono.S.md)
 
                 // Quick amounts
                 HStack(spacing: 8) {
-                    ForEach(quickAmounts, id: \.self) { amount in
-                        QuickAmountPill(amount: amount) {
+                    ForEach(quickAmounts, id: \.self) { amt in
+                        QuickAmountPill(amount: amt) {
                             withAnimation(.spring(duration: 0.2, bounce: 0.4)) {
-                                digits = String(Int(amount))
+                                digits = String(Int(amt))
                             }
                             Haptic.light()
                         }
@@ -64,86 +91,87 @@ struct AddTransactionView: View {
                 .padding(.horizontal, Mono.S.md)
                 .padding(.bottom, Mono.S.md)
 
-                // Note field
-                HStack(spacing: 10) {
-                    Image(systemName: "text.alignleft")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(Mono.C.textTert)
-
-                    TextField("Add a note…", text: $note)
-                        .font(Mono.T.body)
-                        .foregroundColor(Mono.C.text)
-                }
-                .padding(.horizontal, Mono.S.md)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                        .fill(Mono.C.surfaceUp)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                                .strokeBorder(Mono.C.border, lineWidth: 0.5)
-                        )
-                )
-                .padding(.horizontal, Mono.S.md)
-                .padding(.bottom, Mono.S.md)
-
                 // Numpad
-                MonoNumpad(digits: $digits) {
-                    commitTransaction()
-                }
-                .padding(.horizontal, Mono.S.md)
-                .padding(.bottom, Mono.S.md)
+                MonoNumpad(digits: $digits) { commitTransaction() }
+                    .padding(.horizontal, Mono.S.md)
+                    .padding(.bottom, Mono.S.md)
             }
+            .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(Mono.C.surface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous)
-                            .strokeBorder(Mono.C.borderBright.opacity(0.4), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .strokeBorder(Mono.C.borderBright.opacity(0.35), lineWidth: 0.5)
                     )
-                    .shadow(color: .black.opacity(0.7), radius: 40, x: 0, y: -8)
+                    .shadow(color: .black.opacity(0.55), radius: 36, x: 0, y: -6)
                     .ignoresSafeArea(edges: .bottom)
             )
-            .frame(maxWidth: .infinity)
             .frame(maxHeight: .infinity, alignment: .bottom)
+            .offset(y: panelOffset)
+            // Swipe-down to dismiss
+            .gesture(
+                DragGesture(minimumDistance: 16)
+                    .onChanged { value in
+                        guard value.translation.height > 0 else { return }
+                        panelOffset = value.translation.height
+                        backdropOpacity = max(0, 0.65 * (1 - value.translation.height / 320))
+                    }
+                    .onEnded { value in
+                        let dy = value.translation.height
+                        let velocity = value.predictedEndTranslation.height
+                        if dy > 90 || velocity > 280 {
+                            hide()
+                        } else {
+                            withAnimation(.spring(duration: 0.38, bounce: 0.38)) {
+                                panelOffset = 0
+                                backdropOpacity = 0.65
+                            }
+                        }
+                    }
+            )
 
-            // Success flash
+            // ── Success flash (centered over everything)
             if showSuccess {
                 SuccessCheckmark()
                     .transition(.scale.combined(with: .opacity))
             }
         }
         .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.spring(duration: 0.42, bounce: 0.05)) {
+                panelOffset = 0
+                backdropOpacity = 0.65
+            }
+        }
     }
 
+    // MARK: - Helpers
+
     private var quickAmounts: [Double] {
-        type == .inward
-            ? [1000, 5000, 10000, 50000]
-            : [500, 1000, 2000, 5000]
+        type == .inward ? [1_000, 5_000, 10_000, 50_000] : [500, 1_000, 2_000, 5_000]
     }
 
     private func commitTransaction() {
-        guard isValid else {
-            Haptic.error()
-            return
-        }
-        store.addTransaction(amount: amount, type: type, note: note)
+        guard isValid else { Haptic.error(); return }
+        store.addTransaction(amount: amount, type: type, note: "")
         Haptic.success()
-        withAnimation(.spring(duration: 0.4, bounce: 0.3)) {
-            showSuccess = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-            dismissWithAnimation()
-        }
+        withAnimation(.spring(duration: 0.4, bounce: 0.3)) { showSuccess = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { hide() }
     }
 
-    private func dismissWithAnimation() {
-        withAnimation(.spring(duration: 0.4, bounce: 0.1)) {
-            isPresented = false
+    private func hide() {
+        withAnimation(.spring(duration: 0.34, bounce: 0.05)) {
+            panelOffset = 700
+            backdropOpacity = 0
         }
-        digits = ""
-        note = ""
-        showSuccess = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+            isPresented = false
+            digits = ""
+            showSuccess = false
+            panelOffset = 700
+            backdropOpacity = 0
+        }
     }
 }
 
@@ -165,11 +193,13 @@ struct TypeTab: View {
             }
             .foregroundColor(isActive ? Mono.C.bg : Mono.C.textSec)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 11)
             .background(
                 RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                    .fill(isActive ? Mono.C.text : .clear)
+                    .fill(isActive ? Mono.C.text : Color.clear)
+                    .shadow(color: isActive ? .black.opacity(0.25) : .clear, radius: 4, y: 2)
             )
+            .animation(.spring(duration: 0.28, bounce: 0.3), value: isActive)
         }
         .buttonStyle(.plain)
     }

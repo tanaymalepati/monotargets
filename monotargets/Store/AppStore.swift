@@ -138,6 +138,15 @@ final class AppStore {
         save()
     }
 
+    // MARK: - Clear All Data
+
+    func clearAllData() {
+        transactions = []
+        savingsItems = []
+        // Preserve backup folder bookmark so the user doesn't have to re-select it
+        save()
+    }
+
     // MARK: - Stats
 
     func transactionsForItem(_ id: UUID) -> [Transaction] {

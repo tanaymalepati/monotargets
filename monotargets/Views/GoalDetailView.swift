@@ -7,9 +7,11 @@ struct GoalDetailView: View {
     let itemID: UUID
 
     @State private var showAssign = false
+    @State private var showUnassign = false
     @State private var showEdit = false
     @State private var appeared = false
-    @State private var showDeleteConfirm = false
+    @State private var itemToDelete: SavingsItem?
+    @State private var showDeleteZone = false
     @State private var celebrateComplete = false
 
     private var item: SavingsItem? {
@@ -29,13 +31,14 @@ struct GoalDetailView: View {
                             .opacity(appeared ? 1 : 0)
                             .scaleEffect(appeared ? 1 : 0.93)
 
-                        // Action buttons
-                        HStack(spacing: 10) {
+                        // Action button — full width
+                        Group {
                             if !item.isFullyFunded {
                                 ActionButton(
                                     icon: "arrow.right.circle.fill",
                                     label: "Assign Funds",
-                                    filled: true
+                                    filled: true,
+                                    isAccent: true
                                 ) {
                                     showAssign = true
                                     Haptic.medium()
@@ -54,15 +57,6 @@ struct GoalDetailView: View {
                                     RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
                                         .fill(Mono.C.text)
                                 )
-                            }
-
-                            ActionButton(
-                                icon: "pencil.circle.fill",
-                                label: "Edit",
-                                filled: false
-                            ) {
-                                showEdit = true
-                                Haptic.light()
                             }
                         }
                         .padding(.horizontal, Mono.S.md)
@@ -85,18 +79,23 @@ struct GoalDetailView: View {
                         // Unassign / Delete
                         VStack(spacing: 8) {
                             if item.assignedAmount > 0 {
-                                DangerButton(
-                                    icon: "arrow.left.circle",
-                                    label: "Unassign All Funds"
+                                ActionButton(
+                                    icon: "arrow.left.circle.fill",
+                                    label: "Unassign Funds",
+                                    filled: false
                                 ) {
-                                    store.unassignFunds(from: itemID, amount: item.assignedAmount)
+                                    showUnassign = true
                                     Haptic.medium()
                                 }
                             }
-                            DangerButton(icon: "trash", label: "Delete Goal") {
-                                showDeleteConfirm = true
+                            if showDeleteZone {
+                                DangerButton(icon: "trash", label: "Delete Goal") {
+                                    itemToDelete = item
+                                }
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
                             }
                         }
+                        .animation(.spring(duration: 0.35, bounce: 0.2), value: showDeleteZone)
                         .padding(.horizontal, Mono.S.md)
                         .opacity(appeared ? 1 : 0)
 
@@ -124,6 +123,30 @@ struct GoalDetailView: View {
                     .font(Mono.T.mono(16, .semibold))
                     .foregroundColor(Mono.C.text)
             }
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                if let item {
+                    Button {
+                        var updated = item
+                        updated.isFavorite.toggle()
+                        store.updateSavingsItem(updated)
+                        Haptic.select()
+                    } label: {
+                        Image(systemName: item.isFavorite ? "star.fill" : "star")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(item.isFavorite ? Mono.C.accent : Mono.C.textSec)
+                    }
+
+                    Button {
+                        showEdit = true
+                        showDeleteZone = true
+                        Haptic.light()
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(Mono.C.textSec)
+                    }
+                }
+            }
         }
         .onAppear {
             withAnimation(.spring(duration: 0.6, bounce: 0.3).delay(0.05)) {
@@ -144,9 +167,23 @@ struct GoalDetailView: View {
         .sheet(isPresented: $showAssign) {
             if let item {
                 AssignFundsView(item: item)
-                    .presentationDetents([.medium])
-                    .presentationDragIndicator(.visible)
-                    .presentationBackground(Mono.C.bg)
+                    .presentationDetents([.fraction(0.88)])
+                    .presentationDragIndicator(.hidden)
+                    .presentationBackground {
+                        Color(white: 0.035)
+                    }
+                    .presentationCornerRadius(20)
+            }
+        }
+        .sheet(isPresented: $showUnassign) {
+            if let item {
+                UnassignFundsView(item: item)
+                    .presentationDetents([.fraction(0.88)])
+                    .presentationDragIndicator(.hidden)
+                    .presentationBackground {
+                        Color(white: 0.035)
+                    }
+                    .presentationCornerRadius(20)
             }
         }
         .sheet(isPresented: $showEdit) {
@@ -157,12 +194,17 @@ struct GoalDetailView: View {
                     .presentationBackground(Mono.C.bg)
             }
         }
-        .confirmationDialog("Delete this goal?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete Goal", role: .destructive) {
-                store.deleteSavingsItem(id: itemID)
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
+        .sheet(item: $itemToDelete) { snap in
+            DeleteGoalConfirmSheet(item: snap)
+                .presentationDetents([.fraction(0.65)])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground {
+                    Color(white: 0.035)
+                }
+                .presentationCornerRadius(20)
+        }
+        .onChange(of: item?.id) { _, newID in
+            if newID == nil { dismiss() }
         }
     }
 }
@@ -323,7 +365,15 @@ struct ActionButton: View {
     let icon: String
     let label: String
     var filled: Bool = false
+    var isAccent: Bool = false
     let action: () -> Void
+
+    @AppStorage("vault_monochrome") private var isMonochrome = false
+
+    private var activeFill: Color {
+        guard filled else { return Mono.C.surfaceUp }
+        return (isAccent && !isMonochrome) ? Mono.C.accent : Mono.C.text
+    }
 
     var body: some View {
         Button(action: action) {
@@ -338,10 +388,14 @@ struct ActionButton: View {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                    .fill(filled ? Mono.C.text : Mono.C.surfaceUp)
+                    .fill(activeFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
                             .strokeBorder(filled ? .clear : Mono.C.border, lineWidth: 0.5)
+                    )
+                    .shadow(
+                        color: (filled && isAccent && !isMonochrome) ? Mono.C.accent.opacity(0.5) : .clear,
+                        radius: 14, x: 0, y: 0
                     )
             )
         }
@@ -375,6 +429,120 @@ struct DangerButton: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Delete Goal Confirmation Sheet
+
+struct DeleteGoalConfirmSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    let item: SavingsItem
+
+    @State private var confirmText = ""
+
+    private var isConfirmed: Bool { confirmText == item.name }
+
+    var body: some View {
+        VStack(spacing: 0) {
+
+            Capsule()
+                .fill(Mono.C.borderBright)
+                .frame(width: 36, height: 4)
+                .padding(.top, 14)
+                .padding(.bottom, Mono.S.md)
+
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .font(Mono.T.mono(14, .medium))
+                    .foregroundColor(Mono.C.textSec)
+                Spacer()
+                Text("Delete Goal")
+                    .font(Mono.T.mono(15, .semibold))
+                    .foregroundColor(Mono.C.negative)
+                Spacer()
+                Text("Cancel").font(Mono.T.mono(14, .medium)).foregroundColor(.clear)
+            }
+            .padding(.horizontal, Mono.S.lg)
+            .padding(.bottom, Mono.S.lg)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                    .fill(Mono.C.negative.opacity(0.08))
+                    .frame(width: 58, height: 58)
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundColor(Mono.C.negative)
+            }
+            .padding(.bottom, Mono.S.md)
+
+            Text("This goal and all its fund assignments will be permanently deleted.")
+                .font(Mono.T.mono(13, .regular))
+                .foregroundColor(Mono.C.textSec)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.horizontal, Mono.S.xl)
+                .padding(.bottom, Mono.S.xl)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Type \"\(item.name)\" to confirm")
+                    .font(Mono.T.mono(11, .medium))
+                    .foregroundColor(Mono.C.textDim)
+
+                TextField("", text: $confirmText)
+                    .font(Mono.T.mono(15, .regular))
+                    .foregroundColor(isConfirmed ? Mono.C.negative : Mono.C.text)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .padding(Mono.S.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                            .fill(Mono.C.surfaceUp)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                    .strokeBorder(
+                                        isConfirmed ? Mono.C.negative.opacity(0.7) : Mono.C.border,
+                                        lineWidth: isConfirmed ? 1.0 : 0.5
+                                    )
+                            )
+                    )
+                    .animation(.spring(duration: 0.25, bounce: 0.2), value: isConfirmed)
+            }
+            .padding(.horizontal, Mono.S.md)
+            .padding(.bottom, Mono.S.lg)
+
+            Button {
+                guard isConfirmed else { Haptic.error(); return }
+                store.deleteSavingsItem(id: item.id)
+                Haptic.success()
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "trash.fill").font(.system(size: 14))
+                    Text("Delete Goal").font(Mono.T.mono(15, .semibold))
+                }
+                .foregroundColor(isConfirmed ? .white : Mono.C.textDim)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        .fill(isConfirmed ? Mono.C.negative : Mono.C.surfaceUp)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                .strokeBorder(
+                                    isConfirmed ? .clear : Mono.C.border.opacity(0.5),
+                                    lineWidth: 0.5
+                                )
+                        )
+                )
+                .animation(.spring(duration: 0.3, bounce: 0.2), value: isConfirmed)
+            }
+            .buttonStyle(.plain)
+            .disabled(!isConfirmed)
+            .padding(.horizontal, Mono.S.md)
+            .padding(.bottom, Mono.S.xl)
+        }
     }
 }
 

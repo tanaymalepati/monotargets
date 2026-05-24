@@ -42,9 +42,8 @@ struct RootView: View {
             TabView(selection: $selectedTab) {
                 NavigationStack {
                     HomeView()
-                        .navigationTitle("VAULT")
+                        .navigationTitle("MONOTARGETS")
                         .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { navigationToolbar }
                 }
                 .tag(Tab.home)
 
@@ -52,7 +51,6 @@ struct RootView: View {
                     GoalsView()
                         .navigationTitle("GOALS")
                         .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { navigationToolbar }
                 }
                 .tag(Tab.goals)
 
@@ -60,7 +58,6 @@ struct RootView: View {
                     HistoryView()
                         .navigationTitle("HISTORY")
                         .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { navigationToolbar }
                 }
                 .tag(Tab.history)
 
@@ -68,7 +65,6 @@ struct RootView: View {
                     SettingsView()
                         .navigationTitle("SETTINGS")
                         .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { navigationToolbar }
                 }
                 .tag(Tab.settings)
             }
@@ -86,23 +82,16 @@ struct RootView: View {
             // Custom tab bar
             if tabBarVisible {
                 VaultTabBar(selectedTab: $selectedTab, onAdd: {
-                    withAnimation(.spring(duration: 0.45, bounce: 0.3)) {
-                        showAddTransaction = true
-                    }
+                    showAddTransaction = true
                     Haptic.medium()
                 })
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            // Add transaction overlay (slides down from top)
+            // Add transaction overlay (springs up from bottom)
             if showAddTransaction {
                 AddTransactionView(isPresented: $showAddTransaction)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .move(edge: .top).combined(with: .opacity)
-                        )
-                    )
+                    .transition(.identity)   // animation is fully internal
                     .zIndex(10)
             }
         }
@@ -129,38 +118,9 @@ struct RootView: View {
                     }
                 }
         )
-        .animation(.spring(duration: 0.3, bounce: 0.2), value: showAddTransaction)
+        .animation(.spring(duration: 0.3, bounce: 0.2), value: tabBarVisible)
     }
 
-    @ToolbarContentBuilder
-    private var navigationToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarLeading) {
-            HStack(spacing: 5) {
-                Image(systemName: "arrow.up.arrow.down.circle.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Mono.C.textTert)
-            }
-        }
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button {
-                withAnimation(.spring(duration: 0.45, bounce: 0.3)) {
-                    showAddTransaction = true
-                }
-                Haptic.medium()
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(Mono.C.surfaceUp)
-                        .overlay(Circle().strokeBorder(Mono.C.border, lineWidth: 0.5))
-                        .frame(width: 32, height: 32)
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(Mono.C.text)
-                }
-            }
-            .buttonStyle(.plain)
-        }
-    }
 }
 
 // MARK: - Custom Tab Bar

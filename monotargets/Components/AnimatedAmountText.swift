@@ -112,27 +112,45 @@ struct AmountInputField: View {
 struct MonoNumpad: View {
     @Binding var digits: String
     var maxDigits: Int = 12
+    var showConfirmKey: Bool = true
 
-    private let keys: [[String]] = [
+    private let topKeys: [[String]] = [
         ["1", "2", "3"],
         ["4", "5", "6"],
         ["7", "8", "9"],
-        ["⌫", "0", "✓"],
     ]
 
     var onConfirm: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 10) {
-            ForEach(keys, id: \.self) { row in
+            ForEach(topKeys, id: \.self) { row in
                 HStack(spacing: 10) {
                     ForEach(row, id: \.self) { key in
-                        NumpadKey(label: key) {
-                            handleKey(key)
-                        }
-                        .disabled(key == "✓" ? digits.isEmpty : false)
+                        NumpadKey(label: key) { handleKey(key) }
                     }
                 }
+            }
+            // Bottom row
+            if showConfirmKey {
+                HStack(spacing: 10) {
+                    NumpadKey(label: "⌫") { handleKey("⌫") }
+                    NumpadKey(label: "0") { handleKey("0") }
+                    NumpadKey(label: "✓") { handleKey("✓") }
+                        .disabled(digits.isEmpty)
+                }
+            } else {
+                GeometryReader { geo in
+                    let spacing: CGFloat = 10
+                    let colW = (geo.size.width - spacing * 2) / 3
+                    HStack(spacing: spacing) {
+                        NumpadKey(label: "⌫") { handleKey("⌫") }
+                            .frame(width: colW)
+                        NumpadKey(label: "0") { handleKey("0") }
+                            .frame(width: colW * 2 + spacing)
+                    }
+                }
+                .frame(height: 64)
             }
         }
         .padding(.horizontal, 4)

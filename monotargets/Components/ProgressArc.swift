@@ -8,7 +8,14 @@ struct ProgressRing: View {
     var lineWidth: CGFloat = 3.5
     var animated: Bool = true
 
+    @AppStorage("vault_monochrome") private var isMonochrome = false
     @State private var displayProgress: Double = 0
+
+    private var ringGradient: LinearGradient {
+        isMonochrome
+            ? LinearGradient(colors: [Color(white: 0.70), Color(white: 0.50)], startPoint: .leading, endPoint: .trailing)
+            : Mono.G.progressFill
+    }
 
     var body: some View {
         ZStack {
@@ -18,10 +25,11 @@ struct ProgressRing: View {
             Circle()
                 .trim(from: 0, to: displayProgress)
                 .stroke(
-                    Mono.G.progressFill,
+                    ringGradient,
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
+                .shadow(color: isMonochrome ? .clear : Mono.C.accent.opacity(0.7), radius: 8, x: 0, y: 0)
                 .animation(.spring(duration: 1.0, bounce: 0.2), value: displayProgress)
         }
         .frame(width: size, height: size)
@@ -49,7 +57,14 @@ struct MonoProgressBar: View {
     var height: CGFloat = 4
     var showLabel: Bool = false
 
+    @AppStorage("vault_monochrome") private var isMonochrome = false
     @State private var displayProgress: Double = 0
+
+    private var barGradient: LinearGradient {
+        isMonochrome
+            ? LinearGradient(colors: [Color(white: 0.70), Color(white: 0.50)], startPoint: .leading, endPoint: .trailing)
+            : Mono.G.progressFill
+    }
 
     var body: some View {
         VStack(spacing: 4) {
@@ -60,8 +75,9 @@ struct MonoProgressBar: View {
                         .frame(height: height)
 
                     RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                        .fill(Mono.G.progressFill)
+                        .fill(barGradient)
                         .frame(width: geo.size.width * displayProgress, height: height)
+                        .shadow(color: isMonochrome ? .clear : Mono.C.accent.opacity(0.65), radius: 6, x: 0, y: 0)
                         .animation(.spring(duration: 1.0, bounce: 0.15), value: displayProgress)
                 }
             }
@@ -96,9 +112,17 @@ struct BalanceSegmentBar: View {
     let unassigned: Double
     var height: CGFloat = 6
 
+    @AppStorage("vault_monochrome") private var isMonochrome = false
+
     private var total: Double { assigned + unassigned }
     private var assignedRatio: Double {
         total > 0 ? min(assigned / total, 1.0) : 0
+    }
+
+    private var segGradient: LinearGradient {
+        isMonochrome
+            ? LinearGradient(colors: [Color(white: 0.70), Color(white: 0.50)], startPoint: .leading, endPoint: .trailing)
+            : Mono.G.progressFill
     }
 
     @State private var displayRatio: Double = 0
@@ -113,11 +137,12 @@ struct BalanceSegmentBar: View {
                 HStack(spacing: 1.5) {
                     if displayRatio > 0 {
                         RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-                            .fill(Mono.G.progressFill)
+                            .fill(segGradient)
                             .frame(
                                 width: max(geo.size.width * displayRatio - 1, 0),
                                 height: height
                             )
+                            .shadow(color: isMonochrome ? .clear : Mono.C.accent.opacity(0.65), radius: 6, x: 0, y: 0)
                     }
 
                     if displayRatio < 1.0 && displayRatio > 0 {
