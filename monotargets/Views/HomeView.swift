@@ -40,9 +40,14 @@ struct HomeView: View {
                 }
             }
         }
-        .navigationDestination(item: $selectedGoal) { item in
-            GoalDetailView(itemID: item.id)
-                .navigationTransition(.zoom(sourceID: item.id, in: zoomNamespace))
+        .sheet(item: $selectedGoal) { item in
+            NavigationStack {
+                GoalDetailView(itemID: item.id)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .presentationBackground(Mono.C.bg)
+            .presentationCornerRadius(20)
         }
         .onAppear {
             withAnimation(.spring(duration: 0.7, bounce: 0.35).delay(0.1)) {
@@ -310,17 +315,17 @@ struct FavoriteGoalCard: View {
         .padding(Mono.S.md)
         .monoCard(elevated: true)
         .matchedTransitionSource(id: item.id, in: namespace)
-        .onLongPressGesture(minimumDuration: 1.0, pressing: { isPressing in
+        .onLongPressGesture(minimumDuration: 0.5, pressing: { isPressing in
             if isPressing {
-                withAnimation(.spring(duration: 0.25, bounce: 0.3)) { showHoldRing = true }
-                withAnimation(.linear(duration: 0.95)) { holdProgress = 1.0 }
+                withAnimation(.spring(duration: 0.2, bounce: 0.3)) { showHoldRing = true }
+                withAnimation(.linear(duration: 0.45)) { holdProgress = 1.0 }
                 let work = DispatchWorkItem {
                     Haptic.light()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { Haptic.medium() }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) { Haptic.light() }
                 }
                 jitterWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
             } else {
                 jitterWork?.cancel()
                 jitterWork = nil
@@ -506,7 +511,14 @@ struct TransactionRowView: View {
             TransactionDetailSheet(transaction: transaction)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(Mono.C.bg)
+                .presentationBackground {
+                    Color(white: 0.08)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 38, style: .continuous)
+                                .strokeBorder(Mono.C.borderBright, lineWidth: 1)
+                        )
+                }
+                .presentationCornerRadius(38)
         }
     }
 }
@@ -531,14 +543,6 @@ struct TransactionDetailSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-
-            // ── Drag handle
-            Capsule()
-                .fill(Mono.C.borderBright)
-                .frame(width: 36, height: 4)
-                .padding(.top, 14)
-                .padding(.bottom, Mono.S.md)
-
             // ── Header row
             HStack {
                 Text("Transaction")
@@ -549,6 +553,7 @@ struct TransactionDetailSheet: View {
                     .font(Mono.T.mono(14, .medium))
                     .foregroundColor(Mono.C.textSec)
             }
+            .padding(.top, 32)
             .padding(.horizontal, Mono.S.lg)
             .padding(.bottom, Mono.S.lg)
 

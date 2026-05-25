@@ -34,7 +34,6 @@ struct HistoryView: View {
             if cal.isDateInToday(t.date)     { key = "Today" }
             else if cal.isDateInYesterday(t.date) { key = "Yesterday" }
             else {
-                let components = cal.dateComponents([.year, .month], from: t.date)
                 let formatter = DateFormatter()
                 formatter.dateFormat = "MMMM yyyy"
                 key = formatter.string(from: t.date)

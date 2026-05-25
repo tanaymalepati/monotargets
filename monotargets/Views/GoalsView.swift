@@ -5,9 +5,12 @@ struct GoalsView: View {
     @State private var showCreateGoal = false
     @State private var selectedItem: SavingsItem?
     @State private var appeared = false
+    @State private var selectedSegment = 0
+    @Namespace private var zoomNamespace
 
-    private var inProgressItems: [SavingsItem] { store.savingsItems.filter { !$0.isFullyFunded } }
-    private var fundedItems: [SavingsItem]     { store.savingsItems.filter { $0.isFullyFunded } }
+    private var inProgressItems: [SavingsItem] { store.savingsItems.filter { !$0.isFullyFunded && !$0.isCompleted } }
+    private var fundedItems: [SavingsItem]     { store.savingsItems.filter { $0.isFullyFunded && !$0.isCompleted } }
+    private var completedItems: [SavingsItem]  { store.savingsItems.filter { $0.isCompleted }.sorted { $0.createdAt > $1.createdAt } }
 
     var body: some View {
         ZStack {
@@ -22,53 +25,82 @@ struct GoalsView: View {
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 20)
 
-                    if store.savingsItems.isEmpty {
-                        EmptyStateCard(
-                            icon: "target",
-                            title: "No goals yet",
-                            subtitle: "Create your first savings goal\nto start tracking"
-                        )
-                        .padding(.horizontal, Mono.S.md)
-                        .padding(.top, Mono.S.xl)
-                    } else {
-                        // In-progress goals
-                        ForEach(Array(inProgressItems.enumerated()), id: \.element.id) { index, item in
-                            GoalCard(item: item) { selectedItem = item }
-                                .padding(.horizontal, Mono.S.md)
-                                .opacity(appeared ? 1 : 0)
-                                .offset(y: appeared ? 0 : 24 + CGFloat(index * 8))
-                                .animation(
-                                    .spring(duration: 0.5, bounce: 0.3).delay(0.1 + Double(index) * 0.07),
-                                    value: appeared
-                                )
-                        }
+                    Picker("", selection: $selectedSegment) {
+                        Text("Active").tag(0)
+                        Text("Completed").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, Mono.S.md)
 
-                        // Separator between in-progress and funded
-                        if !fundedItems.isEmpty && !inProgressItems.isEmpty {
-                            HStack(spacing: Mono.S.sm) {
-                                Rectangle()
-                                    .fill(Mono.C.border)
-                                    .frame(height: 0.5)
-                                OverlineLabel(text: "Funded", opacity: 0.35)
-                                Rectangle()
-                                    .fill(Mono.C.border)
-                                    .frame(height: 0.5)
-                            }
+                    if selectedSegment == 0 {
+                        if store.savingsItems.isEmpty {
+                            EmptyStateCard(
+                                icon: "target",
+                                title: "No goals yet",
+                                subtitle: "Create your first savings goal\nto start tracking"
+                            )
                             .padding(.horizontal, Mono.S.md)
-                            .opacity(appeared ? 1 : 0)
-                        }
+                            .padding(.top, Mono.S.xl)
+                        } else {
+                            // In-progress goals
+                            ForEach(Array(inProgressItems.enumerated()), id: \.element.id) { index, item in
+                                GoalCard(item: item, namespace: zoomNamespace) { selectedItem = item }
+                                    .padding(.horizontal, Mono.S.md)
+                                    .opacity(appeared ? 1 : 0)
+                                    .offset(y: appeared ? 0 : 24 + CGFloat(index * 8))
+                                    .animation(
+                                        .spring(duration: 0.5, bounce: 0.3).delay(0.1 + Double(index) * 0.07),
+                                        value: appeared
+                                    )
+                            }
 
-                        // Funded goals
-                        ForEach(Array(fundedItems.enumerated()), id: \.element.id) { index, item in
-                            GoalCard(item: item) { selectedItem = item }
+                            // Separator between in-progress and funded
+                            if !fundedItems.isEmpty && !inProgressItems.isEmpty {
+                                HStack(spacing: Mono.S.sm) {
+                                    Rectangle()
+                                        .fill(Mono.C.border)
+                                        .frame(height: 0.5)
+                                    OverlineLabel(text: "Funded", opacity: 0.35)
+                                    Rectangle()
+                                        .fill(Mono.C.border)
+                                        .frame(height: 0.5)
+                                }
                                 .padding(.horizontal, Mono.S.md)
                                 .opacity(appeared ? 1 : 0)
-                                .offset(y: appeared ? 0 : 24 + CGFloat(index * 8))
-                                .animation(
-                                    .spring(duration: 0.5, bounce: 0.3)
-                                        .delay(0.1 + Double(index + inProgressItems.count) * 0.07),
-                                    value: appeared
-                                )
+                            }
+
+                            // Funded goals
+                            ForEach(Array(fundedItems.enumerated()), id: \.element.id) { index, item in
+                                GoalCard(item: item, namespace: zoomNamespace) { selectedItem = item }
+                                    .padding(.horizontal, Mono.S.md)
+                                    .opacity(appeared ? 1 : 0)
+                                    .offset(y: appeared ? 0 : 24 + CGFloat(index * 8))
+                                    .animation(
+                                        .spring(duration: 0.5, bounce: 0.3)
+                                            .delay(0.1 + Double(index + inProgressItems.count) * 0.07),
+                                        value: appeared
+                                    )
+                            }
+                        }
+                    } else {
+                        if completedItems.isEmpty {
+                            EmptyStateCard(
+                                icon: "checkmark.circle",
+                                title: "No completed goals",
+                                subtitle: "Goals will appear here once\nyou confirm their completion"
+                            )
+                            .padding(.horizontal, Mono.S.md)
+                            .padding(.top, Mono.S.xl)
+                        } else {
+                            ForEach(completedItems) { item in
+                                CompletedGoalCard(item: item)
+                                    .padding(.horizontal, Mono.S.md)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedItem = item
+                                        Haptic.medium()
+                                    }
+                            }
                         }
                     }
 
@@ -77,33 +109,35 @@ struct GoalsView: View {
             }
 
             // FAB
-            VStack {
-                Spacer()
-                HStack {
+            if selectedSegment == 0 {
+                VStack {
                     Spacer()
-                    Button {
-                        showCreateGoal = true
-                        Haptic.medium()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("New Goal")
-                                .font(Mono.T.mono(14, .semibold))
+                    HStack {
+                        Spacer()
+                        Button {
+                            showCreateGoal = true
+                            Haptic.medium()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .bold))
+                                Text("New Goal")
+                                    .font(Mono.T.mono(14, .semibold))
+                            }
+                            .foregroundColor(Mono.C.bg)
+                            .padding(.horizontal, Mono.S.lg)
+                            .padding(.vertical, 14)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Mono.C.text)
+                                    .shadow(color: .white.opacity(0.15), radius: 16)
+                                    .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 4)
+                            )
                         }
-                        .foregroundColor(Mono.C.bg)
-                        .padding(.horizontal, Mono.S.lg)
-                        .padding(.vertical, 14)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Mono.C.text)
-                                .shadow(color: .white.opacity(0.15), radius: 16)
-                                .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 4)
-                        )
+                        .buttonStyle(.plain)
+                        .padding(.trailing, Mono.S.lg)
+                        .padding(.bottom, 96)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, Mono.S.lg)
-                    .padding(.bottom, 96)
                 }
             }
         }
@@ -118,8 +152,14 @@ struct GoalsView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Mono.C.bg)
         }
-        .navigationDestination(item: $selectedItem) { item in
-            GoalDetailView(itemID: item.id)
+        .sheet(item: $selectedItem) { item in
+            NavigationStack {
+                GoalDetailView(itemID: item.id)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .presentationBackground(Mono.C.bg)
+            .presentationCornerRadius(20)
         }
     }
 }
@@ -179,6 +219,7 @@ struct GoalStatsHeader: View {
 
 struct GoalCard: View {
     let item: SavingsItem
+    let namespace: Namespace.ID
     let onTap: () -> Void
 
     var body: some View {
@@ -282,6 +323,7 @@ struct GoalCard: View {
             }
             .padding(Mono.S.lg)
             .monoCard(elevated: true)
+            .matchedTransitionSource(id: item.id, in: namespace)
         }
         .buttonStyle(CardPressStyle())
     }
@@ -292,5 +334,72 @@ struct CardPressStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(.spring(duration: 0.18, bounce: 0.4), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Completed Goal Card
+
+struct CompletedGoalCard: View {
+    @Environment(AppStore.self) private var store
+    let item: SavingsItem
+    @State private var showDeleteConfirm = false
+
+    var body: some View {
+        HStack(spacing: Mono.S.md) {
+            ZStack {
+                RoundedRectangle(cornerRadius: Mono.R.icon, style: .continuous)
+                    .fill(Mono.C.text)
+                    .frame(width: 44, height: 44)
+                Image(systemName: item.icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(Mono.C.bg)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.name)
+                        .font(Mono.T.mono(15, .semibold))
+                        .foregroundColor(Mono.C.text)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(Mono.C.positive)
+                }
+                Text(item.targetAmount.indianFormatted)
+                    .font(Mono.T.mono(12, .regular))
+                    .foregroundColor(Mono.C.textTert)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 3) {
+                Text("Completed")
+                    .font(Mono.T.mono(10, .semibold))
+                    .foregroundColor(Mono.C.textDim)
+                    .tracking(1)
+                Text(VaultDateFormatter.short.string(from: item.createdAt))
+                    .font(Mono.T.mono(11, .regular))
+                    .foregroundColor(Mono.C.textTert)
+            }
+        }
+        .padding(Mono.S.md)
+        .monoCard(elevated: false)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+                    store.deleteSavingsItem(id: item.id)
+                }
+                Haptic.medium()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .contextMenu {
+            Button(role: .destructive) {
+                store.deleteSavingsItem(id: item.id)
+                Haptic.medium()
+            } label: {
+                Label("Delete Goal", systemImage: "trash")
+            }
+        }
     }
 }

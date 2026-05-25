@@ -9,17 +9,19 @@ final class AppStore {
 
     // Computed balances
     var totalBalance: Double {
-        transactions.reduce(0.0) { sum, t in
+        let rawBalance = transactions.reduce(0.0) { sum, t in
             switch t.type {
             case .inward:   return sum + t.amount
             case .outward:  return sum - t.amount
             case .assign, .unassign: return sum
             }
         }
+        let completedGoalsTotal = savingsItems.filter { $0.isCompleted }.reduce(0.0) { $0 + $1.assignedAmount }
+        return rawBalance - completedGoalsTotal
     }
 
     var totalAssigned: Double {
-        savingsItems.reduce(0.0) { $0 + $1.assignedAmount }
+        savingsItems.filter { !$0.isCompleted }.reduce(0.0) { $0 + $1.assignedAmount }
     }
 
     var totalUnassigned: Double {
@@ -111,9 +113,6 @@ final class AppStore {
         let t = Transaction(amount: amount, type: .assign, note: note, linkedItemID: itemID)
         transactions.insert(t, at: 0)
 
-        if savingsItems[idx].isFullyFunded && !savingsItems[idx].isCompleted {
-            savingsItems[idx].isCompleted = true
-        }
         save()
     }
 
@@ -128,6 +127,18 @@ final class AppStore {
         let note = "Unassigned from \(savingsItems[idx].name)"
         let t = Transaction(amount: actual, type: .unassign, note: note, linkedItemID: itemID)
         transactions.insert(t, at: 0)
+        save()
+    }
+
+    func markGoalCompleted(id: UUID) {
+        guard let idx = savingsItems.firstIndex(where: { $0.id == id }) else { return }
+        savingsItems[idx].isCompleted = true
+        save()
+    }
+
+    func markGoalUncompleted(id: UUID) {
+        guard let idx = savingsItems.firstIndex(where: { $0.id == id }) else { return }
+        savingsItems[idx].isCompleted = false
         save()
     }
 

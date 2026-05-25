@@ -2,7 +2,8 @@ import SwiftUI
 
 struct UnassignFundsView: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+
+    @Binding var isPresented: Bool
 
     let item: SavingsItem
 
@@ -10,6 +11,8 @@ struct UnassignFundsView: View {
 
     @State private var digits = ""
     @State private var showSuccess = false
+    @State private var panelOffset: CGFloat = 700
+    @State private var backdropOpacity: Double = 0
 
     private var amount: Double { AmountFormatter.toDoubleFromDigits(digits) }
     private var isValid: Bool  { amount > 0 && amount <= item.assignedAmount }
@@ -17,7 +20,10 @@ struct UnassignFundsView: View {
 
     var body: some View {
         ZStack {
-            Color(white: 0.035).ignoresSafeArea()
+            // Backdrop
+            Color.black.opacity(backdropOpacity)
+                .ignoresSafeArea()
+                .onTapGesture { hide() }
 
             VStack(spacing: 0) {
 
@@ -30,7 +36,7 @@ struct UnassignFundsView: View {
 
                 // ── Header row
                 HStack {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { hide() }
                         .font(Mono.T.mono(14, .medium))
                         .foregroundColor(Mono.C.textSec)
 
@@ -78,8 +84,8 @@ struct UnassignFundsView: View {
 
                     Spacer()
 
-                    VStack(alignment: .trailing, spacing: 3) {
-                        ProgressRing(progress: item.progress, size: 38, lineWidth: 3)
+                    ZStack {
+                        ProgressRing(progress: item.progress, size: 42, lineWidth: 3)
                         Text("\(Int(item.progress * 100))%")
                             .font(Mono.T.mono(10, .medium))
                             .foregroundColor(Mono.C.textDim)
@@ -148,7 +154,8 @@ struct UnassignFundsView: View {
                     .padding(.vertical, 15)
                     .background(
                         RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                            .fill(isValid ? Mono.C.text : Mono.C.surfaceUp)
+                            .fill(isValid ? Mono.C.red : Mono.C.surfaceUp)
+                            .shadow(color: Mono.C.red.opacity(0.3), radius: isValid ? 12 : 0, y: isValid ? 4 : 0)
                     )
                     .animation(.spring(duration: 0.25, bounce: 0.2), value: isValid)
                 }
@@ -158,13 +165,69 @@ struct UnassignFundsView: View {
                 .padding(.top, Mono.S.sm)
                 .padding(.bottom, Mono.S.lg)
             }
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Mono.C.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .strokeBorder(Mono.C.borderBright.opacity(0.35), lineWidth: 0.5)
+                    )
+                    .shadow(color: .white.opacity(0.15), radius: 30, x: 0, y: 0)
+                    .shadow(color: .black.opacity(0.55), radius: 36, x: 0, y: 10)
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .offset(y: panelOffset)
+            .gesture(
+                DragGesture(minimumDistance: 16)
+                    .onChanged { value in
+                        guard value.translation.height > 0 else { return }
+                        panelOffset = value.translation.height
+                        backdropOpacity = max(0, 0.65 * (1 - value.translation.height / 320))
+                    }
+                    .onEnded { value in
+                        let dy = value.translation.height
+                        let velocity = value.predictedEndTranslation.height
+                        if dy > 90 || velocity > 280 {
+                            hide()
+                        } else {
+                            withAnimation(.spring(duration: 0.38, bounce: 0.38)) {
+                                panelOffset = 0
+                                backdropOpacity = 0.65
+                            }
+                        }
+                    }
+            )
 
             if showSuccess {
                 SuccessCheckmark()
                     .transition(.scale.combined(with: .opacity))
             }
         }
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+                panelOffset = 0
+                backdropOpacity = 0.65
+            }
+        }
         .animation(.spring(duration: 0.25, bounce: 0.2), value: overflows)
+    }
+
+    private func hide() {
+        withAnimation(.spring(duration: 0.4, bounce: 0.1)) {
+            panelOffset = 700
+            backdropOpacity = 0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+            isPresented = false
+            digits = ""
+            showSuccess = false
+            panelOffset = 700
+            backdropOpacity = 0
+        }
     }
 
     private func commitUnassign() {
@@ -172,6 +235,6 @@ struct UnassignFundsView: View {
         store.unassignFunds(from: item.id, amount: amount)
         Haptic.success()
         withAnimation(.spring(duration: 0.4, bounce: 0.3)) { showSuccess = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { dismiss() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { hide() }
     }
 }

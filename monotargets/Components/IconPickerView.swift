@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Icon Data
 
@@ -74,8 +75,7 @@ let vaultIconCategories: [IconCategory] = [
     ]),
     IconCategory(name: "Fashion", symbols: [
         "tshirt", "tshirt.fill",
-        "figure.dress.line.vertical.figure",
-        "shoe.fill", "shoe.2",
+        "shoe.fill", "shoe",
         "handbag.fill", "bag.fill", "bag.badge.plus",
         "backpack.fill", "suitcase.fill",
         "tag.fill", "tag.circle.fill",
@@ -86,9 +86,8 @@ let vaultIconCategories: [IconCategory] = [
     ]),
     IconCategory(name: "Goals", symbols: [
         "target", "scope", "flag.checkered", "checkmark.seal.fill",
-        "medal.fill", "crown.fill", "diamond.fill", "gem",
-        "square.stack.3d.up.fill", "cylinder.split.1x2.fill",
-        "battery.100.bolt", "infinity.circle.fill",
+        "medal.fill", "crown.fill", "diamond.fill",
+        "battery.100", "infinity.circle.fill",
         "arrow.up.right.circle.fill", "chart.line.uptrend.xyaxis.circle.fill"
     ]),
 ]
@@ -109,11 +108,15 @@ struct IconPickerView: View {
     }
 
     private var filteredIcons: [String] {
+        var baseIcons: [String] = []
         if !searchText.isEmpty {
-            return allVaultIcons.filter { $0.localizedCaseInsensitiveContains(searchText) }
+            baseIcons = allVaultIcons.filter { $0.localizedCaseInsensitiveContains(searchText) }
+        } else if selectedCategory == "All" {
+            baseIcons = allVaultIcons
+        } else {
+            baseIcons = vaultIconCategories.first { $0.name == selectedCategory }?.symbols ?? []
         }
-        if selectedCategory == "All" { return allVaultIcons }
-        return vaultIconCategories.first { $0.name == selectedCategory }?.symbols ?? []
+        return baseIcons.filter { UIImage(systemName: $0) != nil }
     }
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)

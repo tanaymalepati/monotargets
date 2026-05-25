@@ -15,6 +15,7 @@ struct CreateGoalView: View {
 
     @State private var focusedField: Field? = .name
     @State private var nameScale: CGFloat = 1.0
+    @FocusState private var isFocused: Bool
 
     enum Field { case name, description }
 
@@ -38,6 +39,7 @@ struct CreateGoalView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 OverlineLabel(text: "Goal Name")
                                 TextField("e.g. MacBook Pro, Europe Trip…", text: $name)
+                                    .focused($isFocused)
                                     .font(Mono.T.mono(17, .semibold))
                                     .foregroundColor(Mono.C.text)
                                     .multilineTextAlignment(.center)
@@ -63,6 +65,7 @@ struct CreateGoalView: View {
                         // Description
                         FormField(label: "Description (Optional)") {
                             TextField("What are you saving for?", text: $description, axis: .vertical)
+                                .focused($isFocused)
                                 .font(Mono.T.body)
                                 .foregroundColor(Mono.C.text)
                                 .lineLimit(3)
@@ -93,7 +96,7 @@ struct CreateGoalView: View {
                                 .padding(.horizontal, Mono.S.lg)
                             }
 
-                            MonoNumpad(digits: $targetDigits)
+                            MonoNumpad(digits: $targetDigits, showConfirmKey: false)
                                 .padding(.horizontal, Mono.S.sm)
                         }
                         .padding(.horizontal, Mono.S.md)
@@ -153,6 +156,26 @@ struct CreateGoalView: View {
                     .padding(.top, Mono.S.md)
                 }
             }
+            .overlay(alignment: .bottom) {
+                if isFocused {
+                    HStack {
+                        Spacer()
+                        Button(action: { isFocused = false }) {
+                            Text("Done")
+                                .font(Mono.T.mono(15, .semibold))
+                                .foregroundColor(Mono.C.bg)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(Mono.C.text))
+                                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                        }
+                    }
+                    .padding(.horizontal, Mono.S.md)
+                    .padding(.bottom, Mono.S.md)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.3, bounce: 0.2), value: isFocused)
             .navigationTitle(isEditing ? "Edit Goal" : "New Goal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)

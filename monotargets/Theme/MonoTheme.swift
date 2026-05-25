@@ -1,26 +1,37 @@
 import SwiftUI
+import UIKit
+
+extension Color {
+    static func dynamic(light: UIColor, dark: UIColor) -> Color {
+        Color(UIColor { traitCollection in
+            return traitCollection.userInterfaceStyle == .light ? light : dark
+        })
+    }
+}
 
 enum Mono {
 
     // MARK: - Colors
     enum C {
-        static let bg          = Color(white: 0.035)
-        static let surface     = Color(white: 0.075)
-        static let surfaceUp   = Color(white: 0.115)
-        static let surfaceTop  = Color(white: 0.155)
-        static let border      = Color(white: 0.130)
-        static let borderBright = Color(white: 0.220)
+        static let bg = Color.dynamic(light: UIColor(white: 0.96, alpha: 1.0), dark: UIColor(white: 0.0, alpha: 1.0))
+        static let surface = Color.dynamic(light: UIColor(white: 1.0, alpha: 1.0), dark: UIColor(white: 0.05, alpha: 1.0))
+        static let surfaceUp = Color.dynamic(light: UIColor(white: 0.98, alpha: 1.0), dark: UIColor(white: 0.08, alpha: 1.0))
+        static let surfaceTop = Color.dynamic(light: UIColor(white: 0.94, alpha: 1.0), dark: UIColor(white: 0.12, alpha: 1.0))
+        
+        static let border = Color.dynamic(light: UIColor(white: 0.85, alpha: 1.0), dark: UIColor(white: 0.12, alpha: 1.0))
+        static let borderBright = Color.dynamic(light: UIColor(white: 0.75, alpha: 1.0), dark: UIColor(white: 0.20, alpha: 1.0))
 
-        static let white       = Color.white
-        static let text        = Color(white: 1.00)
-        static let textSec     = Color(white: 0.62)
-        static let textTert    = Color(white: 0.38)
-        static let textDim     = Color(white: 0.22)
+        static let white = Color.white
+        static let text = Color.dynamic(light: UIColor(white: 0.05, alpha: 1.0), dark: UIColor(white: 1.00, alpha: 1.0))
+        static let textSec = Color.dynamic(light: UIColor(white: 0.45, alpha: 1.0), dark: UIColor(white: 0.62, alpha: 1.0))
+        static let textTert = Color.dynamic(light: UIColor(white: 0.6, alpha: 1.0), dark: UIColor(white: 0.38, alpha: 1.0))
+        static let textDim = Color.dynamic(light: UIColor(white: 0.75, alpha: 1.0), dark: UIColor(white: 0.22, alpha: 1.0))
 
-        static let positive    = Color(white: 0.96)
-        static let negative    = Color(white: 0.48)
-        static let accent      = Color(red: 0, green: 1.0, blue: 193.0/255.0)
-        static let red         = Color(red: 1.0, green: 0, blue: 100.0/255.0)
+        static let positive = Color.dynamic(light: UIColor(red: 0.1, green: 0.6, blue: 0.3, alpha: 1.0), dark: UIColor(white: 0.96, alpha: 1.0))
+        static let negative = Color.dynamic(light: UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0), dark: UIColor(white: 0.48, alpha: 1.0))
+        
+        static let accent = Color(red: 0, green: 1.0, blue: 193.0/255.0)
+        static let red = Color(red: 1.0, green: 0, blue: 100.0/255.0)
     }
 
     // MARK: - Typography
@@ -68,15 +79,24 @@ enum Mono {
     // MARK: - Gradients
     enum G {
         static let hero = LinearGradient(
-            colors: [Color(white: 0.18), Color(white: 0.07)],
+            colors: [
+                Color.dynamic(light: UIColor(white: 0.98, alpha: 1.0), dark: UIColor(white: 0.12, alpha: 1.0)),
+                Color.dynamic(light: UIColor(white: 0.92, alpha: 1.0), dark: UIColor(white: 0.04, alpha: 1.0))
+            ],
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
         static let card = LinearGradient(
-            colors: [Color(white: 0.13), Color(white: 0.07)],
+            colors: [
+                Color.dynamic(light: UIColor(white: 1.0, alpha: 1.0), dark: UIColor(white: 0.08, alpha: 1.0)),
+                Color.dynamic(light: UIColor(white: 0.96, alpha: 1.0), dark: UIColor(white: 0.03, alpha: 1.0))
+            ],
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
         static let cardSubtle = LinearGradient(
-            colors: [Color(white: 0.10), Color(white: 0.06)],
+            colors: [
+                Color.dynamic(light: UIColor(white: 0.98, alpha: 1.0), dark: UIColor(white: 0.06, alpha: 1.0)),
+                Color.dynamic(light: UIColor(white: 0.94, alpha: 1.0), dark: UIColor(white: 0.02, alpha: 1.0))
+            ],
             startPoint: .top, endPoint: .bottom
         )
         static let sheen = LinearGradient(
@@ -84,7 +104,10 @@ enum Mono {
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
         static let progressTrack = LinearGradient(
-            colors: [Color(white: 0.18), Color(white: 0.12)],
+            colors: [
+                Color.dynamic(light: UIColor(white: 0.85, alpha: 1.0), dark: UIColor(white: 0.18, alpha: 1.0)),
+                Color.dynamic(light: UIColor(white: 0.90, alpha: 1.0), dark: UIColor(white: 0.12, alpha: 1.0))
+            ],
             startPoint: .leading, endPoint: .trailing
         )
         static let progressFill = LinearGradient(

@@ -11,8 +11,8 @@ struct GoalDetailView: View {
     @State private var showEdit = false
     @State private var appeared = false
     @State private var itemToDelete: SavingsItem?
-    @State private var showDeleteZone = false
     @State private var celebrateComplete = false
+    @State private var showCompleteConfirm = false
 
     private var item: SavingsItem? {
         store.savingsItems.first { $0.id == itemID }
@@ -25,15 +25,73 @@ struct GoalDetailView: View {
             if let item {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: Mono.S.lg) {
+                        Capsule()
+                            .fill(Mono.C.borderBright)
+                            .frame(width: 36, height: 4)
+                            .padding(.top, 12)
+                        
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 20) {
+                                Button {
+                                    var updated = item
+                                    updated.isFavorite.toggle()
+                                    store.updateSavingsItem(updated)
+                                    Haptic.select()
+                                } label: {
+                                    Image(systemName: item.isFavorite ? "star.fill" : "star")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(item.isFavorite ? Mono.C.text : Mono.C.textSec)
+                                }
+                                
+                                Button {
+                                    showEdit = true
+                                    Haptic.light()
+                                } label: {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(Mono.C.textSec)
+                                }
+                                
+                                Button {
+                                    itemToDelete = item
+                                    Haptic.medium()
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(Mono.C.red)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(
+                                Capsule()
+                                    .fill(Mono.C.surfaceUp)
+                                    .overlay(Capsule().strokeBorder(Mono.C.borderBright, lineWidth: 1))
+                            )
+                        }
+                        .padding(.horizontal, Mono.S.md)
+                        .padding(.top, 4)
+                            
                         // Hero section
                         GoalDetailHero(item: item)
                             .padding(.horizontal, Mono.S.md)
                             .opacity(appeared ? 1 : 0)
                             .scaleEffect(appeared ? 1 : 0.93)
-
                         // Action button — full width
                         Group {
-                            if !item.isFullyFunded {
+                            if item.isCompleted {
+                                ActionButton(
+                                    icon: "arrow.uturn.backward.circle.fill",
+                                    label: "Mark as Active",
+                                    filled: false,
+                                    isAccent: false
+                                ) {
+                                    store.markGoalUncompleted(id: item.id)
+                                    Haptic.success()
+                                    dismiss()
+                                }
+                            } else if item.assignedAmount == 0 && !item.isFullyFunded {
                                 ActionButton(
                                     icon: "arrow.right.circle.fill",
                                     label: "Assign Funds",
@@ -44,19 +102,79 @@ struct GoalDetailView: View {
                                     Haptic.medium()
                                 }
                             } else {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 14))
-                                    Text("Fully Funded!")
-                                        .font(Mono.T.mono(13, .semibold))
+                                HStack(spacing: Mono.S.md) {
+                                    if item.assignedAmount > 0 {
+                                        Button {
+                                            showUnassign = true
+                                            Haptic.medium()
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "arrow.left.circle.fill")
+                                                    .foregroundColor(Mono.C.negative)
+                                                    .shadow(color: Mono.C.negative.opacity(0.8), radius: 8)
+                                                Text("Unassign")
+                                            }
+                                            .font(Mono.T.mono(13, .semibold))
+                                            .foregroundColor(Mono.C.text)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                                    .fill(Mono.C.surfaceUp)
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                                            .strokeBorder(Mono.C.negative.opacity(0.5), lineWidth: 1)
+                                                    )
+                                            )
+                                        }
+                                    }
+                                    
+                                    if !item.isFullyFunded {
+                                        Button {
+                                            showAssign = true
+                                            Haptic.medium()
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "arrow.right.circle.fill")
+                                                    .foregroundColor(Mono.C.positive)
+                                                    .shadow(color: Mono.C.positive.opacity(0.8), radius: 8)
+                                                Text("Assign")
+                                            }
+                                            .font(Mono.T.mono(13, .semibold))
+                                            .foregroundColor(Mono.C.text)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                                    .fill(Mono.C.surfaceUp)
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                                            .strokeBorder(Mono.C.positive.opacity(0.5), lineWidth: 1)
+                                                    )
+                                            )
+                                        }
+                                    } else {
+                                        Button {
+                                            showCompleteConfirm = true
+                                            Haptic.medium()
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(Mono.C.bg)
+                                                Text("Complete")
+                                            }
+                                            .font(Mono.T.mono(13, .semibold))
+                                            .foregroundColor(Mono.C.bg)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 14)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                                    .fill(Mono.C.text)
+                                                    .shadow(color: .white.opacity(0.15), radius: 12)
+                                            )
+                                        }
+                                    }
                                 }
-                                .foregroundColor(Mono.C.bg)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(
-                                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                                        .fill(Mono.C.text)
-                                )
                             }
                         }
                         .padding(.horizontal, Mono.S.md)
@@ -76,28 +194,7 @@ struct GoalDetailView: View {
                                 .offset(y: appeared ? 0 : 24)
                         }
 
-                        // Unassign / Delete
-                        VStack(spacing: 8) {
-                            if item.assignedAmount > 0 {
-                                ActionButton(
-                                    icon: "arrow.left.circle.fill",
-                                    label: "Unassign Funds",
-                                    filled: false
-                                ) {
-                                    showUnassign = true
-                                    Haptic.medium()
-                                }
-                            }
-                            if showDeleteZone {
-                                DangerButton(icon: "trash", label: "Delete Goal") {
-                                    itemToDelete = item
-                                }
-                                .transition(.move(edge: .bottom).combined(with: .opacity))
-                            }
-                        }
-                        .animation(.spring(duration: 0.35, bounce: 0.2), value: showDeleteZone)
-                        .padding(.horizontal, Mono.S.md)
-                        .opacity(appeared ? 1 : 0)
+
 
                         Spacer(minLength: 100)
                     }
@@ -109,81 +206,40 @@ struct GoalDetailView: View {
                     CelebrationView()
                         .transition(.opacity)
                 }
+
+                if showAssign {
+                    AssignFundsView(isPresented: $showAssign, item: item)
+                        .transition(.opacity)
+                        .zIndex(100)
+                }
+                
+                if showUnassign {
+                    UnassignFundsView(isPresented: $showUnassign, item: item)
+                        .transition(.opacity)
+                        .zIndex(100)
+                }
             } else {
                 Text("Goal not found")
                     .font(Mono.T.body)
                     .foregroundColor(Mono.C.textSec)
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(item?.name ?? "Goal")
-                    .font(Mono.T.mono(16, .semibold))
-                    .foregroundColor(Mono.C.text)
-            }
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                if let item {
-                    Button {
-                        var updated = item
-                        updated.isFavorite.toggle()
-                        store.updateSavingsItem(updated)
-                        Haptic.select()
-                    } label: {
-                        Image(systemName: item.isFavorite ? "star.fill" : "star")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(item.isFavorite ? Mono.C.accent : Mono.C.textSec)
-                    }
 
-                    Button {
-                        showEdit = true
-                        showDeleteZone = true
-                        Haptic.light()
-                    } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(Mono.C.textSec)
-                    }
-                }
-            }
-        }
         .onAppear {
             withAnimation(.spring(duration: 0.6, bounce: 0.3).delay(0.05)) {
                 appeared = true
             }
         }
         .onChange(of: item?.isFullyFunded) { _, newVal in
-            if newVal == true {
+            if newVal == true && item?.isCompleted == false {
                 withAnimation(.spring(duration: 0.5, bounce: 0.3)) {
                     celebrateComplete = true
                 }
                 Haptic.success()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                     withAnimation { celebrateComplete = false }
+                    showCompleteConfirm = true
                 }
-            }
-        }
-        .sheet(isPresented: $showAssign) {
-            if let item {
-                AssignFundsView(item: item)
-                    .presentationDetents([.fraction(0.88)])
-                    .presentationDragIndicator(.hidden)
-                    .presentationBackground {
-                        Color(white: 0.035)
-                    }
-                    .presentationCornerRadius(20)
-            }
-        }
-        .sheet(isPresented: $showUnassign) {
-            if let item {
-                UnassignFundsView(item: item)
-                    .presentationDetents([.fraction(0.88)])
-                    .presentationDragIndicator(.hidden)
-                    .presentationBackground {
-                        Color(white: 0.035)
-                    }
-                    .presentationCornerRadius(20)
             }
         }
         .sheet(isPresented: $showEdit) {
@@ -202,6 +258,17 @@ struct GoalDetailView: View {
                     Color(white: 0.035)
                 }
                 .presentationCornerRadius(20)
+        }
+        .sheet(isPresented: $showCompleteConfirm) {
+            if let item {
+                ConfirmCompleteSheet(item: item)
+                    .presentationDetents([.fraction(0.55)])
+                    .presentationDragIndicator(.hidden)
+                    .presentationBackground {
+                        Color(white: 0.035)
+                    }
+                    .presentationCornerRadius(20)
+            }
         }
         .onChange(of: item?.id) { _, newID in
             if newID == nil { dismiss() }
@@ -319,7 +386,7 @@ struct StatCell: View {
     let icon: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 10, weight: .medium))
@@ -345,13 +412,32 @@ struct GoalTransactionHistory: View {
             OverlineLabel(text: "Transactions", opacity: 0.45)
                 .padding(.horizontal, 4)
 
+            let transactions = store.transactionsForItem(itemID)
             VStack(spacing: 1) {
-                ForEach(Array(store.transactionsForItem(itemID).prefix(8).enumerated()), id: \.element.id) { index, t in
+                ForEach(Array(transactions.prefix(5).enumerated()), id: \.element.id) { index, t in
                     TransactionRowView(transaction: t)
                         .padding(.horizontal, Mono.S.md)
-                    if index < store.transactionsForItem(itemID).prefix(8).count - 1 {
+                    if index < transactions.prefix(5).count - 1 {
                         MonoDivider().padding(.horizontal, Mono.S.lg)
                     }
+                }
+                
+                if transactions.count > 5 {
+                    MonoDivider().padding(.horizontal, Mono.S.lg)
+                    NavigationLink(destination: GoalAllTransactionsView(itemID: itemID)) {
+                        HStack {
+                            Text("View All Transactions")
+                                .font(Mono.T.mono(14, .semibold))
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundColor(Mono.C.text)
+                        .padding(.horizontal, Mono.S.lg)
+                        .padding(.vertical, 16)
+                        .background(Color(white: 0.08))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .monoCard()
@@ -474,6 +560,7 @@ struct DeleteGoalConfirmSheet: View {
                 Image(systemName: "trash.fill")
                     .font(.system(size: 24, weight: .medium))
                     .foregroundColor(Mono.C.negative)
+                    .shadow(color: Mono.C.negative.opacity(0.4), radius: 12)
             }
             .padding(.bottom, Mono.S.md)
 
@@ -524,16 +611,17 @@ struct DeleteGoalConfirmSheet: View {
                 }
                 .foregroundColor(isConfirmed ? .white : Mono.C.textDim)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
+                .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
                         .fill(isConfirmed ? Mono.C.negative : Mono.C.surfaceUp)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                                .strokeBorder(
-                                    isConfirmed ? .clear : Mono.C.border.opacity(0.5),
-                                    lineWidth: 0.5
-                                )
+                        .shadow(color: Mono.C.negative.opacity(isConfirmed ? 0.3 : 0), radius: isConfirmed ? 16 : 0, y: isConfirmed ? 6 : 0)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        .strokeBorder(
+                            isConfirmed ? .clear : Mono.C.border.opacity(0.5),
+                            lineWidth: 0.5
                         )
                 )
                 .animation(.spring(duration: 0.3, bounce: 0.2), value: isConfirmed)
@@ -552,6 +640,7 @@ struct CelebrationView: View {
     @State private var particles: [ParticleData] = []
     @State private var scale: CGFloat = 0.5
     @State private var opacity: Double = 0
+    @State private var ringProgress: CGFloat = 0.0
 
     struct ParticleData: Identifiable {
         let id = UUID()
@@ -564,9 +653,14 @@ struct CelebrationView: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+                .environment(\.colorScheme, .dark)
+            
+            Color.black.opacity(0.4).ignoresSafeArea()
 
-            VStack(spacing: Mono.S.lg) {
+            VStack(spacing: Mono.S.xl) {
                 ZStack {
                     ForEach(particles) { p in
                         Circle()
@@ -575,35 +669,178 @@ struct CelebrationView: View {
                             .offset(x: p.x, y: p.y)
                     }
 
-                    VStack(spacing: Mono.S.sm) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 64, weight: .bold))
+                    ZStack {
+                        Circle()
+                            .stroke(Mono.C.text.opacity(0.15), lineWidth: 8)
+                            .frame(width: 140, height: 140)
+                        
+                        Circle()
+                            .trim(from: 0, to: ringProgress)
+                            .stroke(Mono.C.text, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .frame(width: 140, height: 140)
+                            .rotationEffect(.degrees(-90))
+                        
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 52, weight: .bold))
                             .foregroundColor(Mono.C.text)
-
-                        Text("GOAL FUNDED!")
-                            .font(Mono.T.mono(22, .bold))
-                            .foregroundColor(Mono.C.text)
-                            .tracking(3)
+                            .shadow(color: .white.opacity(0.5), radius: 12)
                     }
                     .scaleEffect(scale)
                     .opacity(opacity)
                 }
+                
+                Text("GOAL FUNDED!")
+                    .font(Mono.T.mono(24, .bold))
+                    .foregroundColor(Mono.C.text)
+                    .tracking(4)
+                    .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
+                    .opacity(opacity)
+                    .offset(y: opacity == 1 ? 0 : 20)
             }
         }
         .onAppear {
-            particles = (0..<20).map { _ in
+            particles = (0..<24).map { _ in
                 ParticleData(
-                    x: CGFloat.random(in: -120...120),
-                    y: CGFloat.random(in: -100...100),
-                    size: CGFloat.random(in: 4...12),
+                    x: CGFloat.random(in: -140...140),
+                    y: CGFloat.random(in: -140...140),
+                    size: CGFloat.random(in: 4...14),
                     speed: CGFloat.random(in: 0.3...1.0),
                     opacity: Double.random(in: 0.4...1.0)
                 )
             }
-            withAnimation(.spring(duration: 0.5, bounce: 0.6)) {
+            withAnimation(.spring(duration: 0.6, bounce: 0.5)) {
                 scale = 1.0
                 opacity = 1.0
             }
+            withAnimation(.linear(duration: 3.0)) {
+                ringProgress = 1.0
+            }
         }
+    }
+}
+
+// MARK: - Confirm Complete Sheet
+
+struct ConfirmCompleteSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    let item: SavingsItem
+
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+
+            Capsule()
+                .fill(Mono.C.borderBright)
+                .frame(width: 36, height: 4)
+                .padding(.top, 14)
+                .padding(.bottom, Mono.S.lg)
+
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(Mono.C.text)
+                    .frame(width: 64, height: 64)
+
+                Image(systemName: "checkmark")
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundColor(Mono.C.bg)
+            }
+            .scaleEffect(appeared ? 1.0 : 0.5)
+            .opacity(appeared ? 1 : 0)
+            .padding(.bottom, Mono.S.md)
+
+            Text("Goal Fully Funded!")
+                .font(Mono.T.mono(20, .bold))
+                .foregroundColor(Mono.C.text)
+                .padding(.bottom, Mono.S.xs)
+
+            Text(item.targetAmount.indianFormatted + " reached")
+                .font(Mono.T.mono(14, .regular))
+                .foregroundColor(Mono.C.textTert)
+                .padding(.bottom, Mono.S.lg)
+
+            Text("Mark this goal as completed?\nIt will move to your Completed tab.")
+                .font(Mono.T.mono(13, .regular))
+                .foregroundColor(Mono.C.textSec)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.horizontal, Mono.S.xl)
+                .padding(.bottom, Mono.S.xl)
+
+            // Confirm button
+            Button {
+                store.markGoalCompleted(id: item.id)
+                Haptic.success()
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 15))
+                    Text("Mark Complete")
+                        .font(Mono.T.mono(15, .semibold))
+                }
+                .foregroundColor(Mono.C.bg)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        .fill(Mono.C.text)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, Mono.S.md)
+            .padding(.bottom, Mono.S.sm)
+
+            // Keep Active button
+            Button {
+                dismiss()
+            } label: {
+                Text("Keep Active")
+                    .font(Mono.T.mono(14, .medium))
+                    .foregroundColor(Mono.C.textSec)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, Mono.S.md)
+            .padding(.bottom, Mono.S.lg)
+        }
+        .onAppear {
+            withAnimation(.spring(duration: 0.5, bounce: 0.4)) {
+                appeared = true
+            }
+        }
+    }
+}
+
+// MARK: - Goal All Transactions View
+
+struct GoalAllTransactionsView: View {
+    @Environment(AppStore.self) private var store
+    let itemID: UUID
+    
+    var body: some View {
+        ZStack {
+            Mono.C.bg.ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 1) {
+                    let transactions = store.transactionsForItem(itemID)
+                    ForEach(Array(transactions.enumerated()), id: \.element.id) { index, t in
+                        TransactionRowView(transaction: t)
+                            .padding(.horizontal, Mono.S.md)
+                        if index < transactions.count - 1 {
+                            MonoDivider().padding(.horizontal, Mono.S.lg)
+                        }
+                    }
+                }
+                .monoCard()
+                .padding(Mono.S.md)
+            }
+        }
+        .navigationTitle("All Transactions")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

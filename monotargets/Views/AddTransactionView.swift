@@ -70,10 +70,6 @@ struct AddTransactionView: View {
 
                 // Amount display
                 AmountInputField(digits: $digits, fontSize: 52)
-                    .shadow(
-                        color: (!isMonochrome && !digits.isEmpty) ? Mono.C.accent.opacity(0.45) : .clear,
-                        radius: 16, x: 0, y: 0
-                    )
                     .padding(.horizontal, Mono.S.xl)
                     .padding(.bottom, Mono.S.md)
 
@@ -104,9 +100,11 @@ struct AddTransactionView: View {
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
                             .strokeBorder(Mono.C.borderBright.opacity(0.35), lineWidth: 0.5)
                     )
-                    .shadow(color: .black.opacity(0.55), radius: 36, x: 0, y: -6)
-                    .ignoresSafeArea(edges: .bottom)
+                    .shadow(color: .white.opacity(0.15), radius: 30, x: 0, y: 0)
+                    .shadow(color: .black.opacity(0.55), radius: 36, x: 0, y: 10)
             )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
             .frame(maxHeight: .infinity, alignment: .bottom)
             .offset(y: panelOffset)
             // Swipe-down to dismiss
@@ -139,7 +137,7 @@ struct AddTransactionView: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            withAnimation(.spring(duration: 0.42, bounce: 0.05)) {
+            withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
                 panelOffset = 0
                 backdropOpacity = 0.65
             }
@@ -161,7 +159,7 @@ struct AddTransactionView: View {
     }
 
     private func hide() {
-        withAnimation(.spring(duration: 0.34, bounce: 0.05)) {
+        withAnimation(.spring(duration: 0.4, bounce: 0.1)) {
             panelOffset = 700
             backdropOpacity = 0
         }
