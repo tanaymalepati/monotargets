@@ -748,47 +748,51 @@ struct GoalSwipeLayout: View {
 
     @State private var currentPage = 0
 
-    // Cap visible dots at 7; beyond that show "n/total"
-    private var showDots: Bool { items.count <= 7 }
+    private var totalPages: Int { items.count + 1 }
+    private var showDots: Bool { totalPages <= 8 }
 
     var body: some View {
-        VStack(spacing: 10) {
+        // ZStack so TabView fills all space and dots float above the bottom
+        ZStack(alignment: .bottom) {
             TabView(selection: $currentPage) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
                     GoalSwipeCard(item: item, namespace: namespace) { onTap(item) }
                         .padding(.horizontal, 16)
+                        // bottom padding keeps content above tab bar + dot strip
+                        .padding(.bottom, 68)
                         .tag(idx)
                 }
-                // "+" create card at end of deck
                 GoalSwipeCreateCard(onAdd: onAdd)
                     .padding(.horizontal, 16)
+                    .padding(.bottom, 68)
                     .tag(items.count)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .opacity(appeared ? 1 : 0)
 
-            // Page indicator
-            if showDots {
-                HStack(spacing: 5) {
-                    ForEach(0..<(items.count + 1), id: \.self) { i in
-                        let isCurrent = i == currentPage
-                        let isCreate  = i == items.count
-                        Capsule(style: .continuous)
-                            .fill(isCreate
-                                  ? (isCurrent ? Mono.C.accent : Mono.C.textDim)
-                                  : (isCurrent ? Mono.C.text   : Mono.C.textDim))
-                            .frame(width: isCurrent ? 18 : 6, height: 6)
-                            .animation(.spring(duration: 0.28, bounce: 0.4), value: currentPage)
+            // Dot / count indicator — floated above tab bar
+            Group {
+                if showDots {
+                    HStack(spacing: 5) {
+                        ForEach(0..<totalPages, id: \.self) { i in
+                            let isCurrent = i == currentPage
+                            let isCreate  = i == items.count
+                            Capsule(style: .continuous)
+                                .fill(isCreate
+                                      ? (isCurrent ? Mono.C.accent : Mono.C.textDim.opacity(0.4))
+                                      : (isCurrent ? Mono.C.text   : Mono.C.textDim.opacity(0.4)))
+                                .frame(width: isCurrent ? 18 : 6, height: 6)
+                                .animation(.spring(duration: 0.28, bounce: 0.4), value: currentPage)
+                        }
                     }
+                } else {
+                    Text("\(min(currentPage + 1, totalPages)) / \(totalPages)")
+                        .font(Mono.T.mono(11, .medium))
+                        .foregroundColor(Mono.C.textDim)
                 }
-                .padding(.bottom, 104)
-            } else {
-                Text("\(currentPage + 1) / \(items.count + 1)")
-                    .font(Mono.T.mono(11, .medium))
-                    .foregroundColor(Mono.C.textDim)
-                    .padding(.bottom, 104)
             }
+            .padding(.bottom, 108) // sits just above the tab bar
         }
     }
 }
@@ -1027,15 +1031,15 @@ struct GoalSwipeCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Mono.G.cardSubtle)
+                .fill(Color(white: 0.10))   // slightly lighter than bg for clear separation
                 .overlay(
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .strokeBorder(
-                            urgencyColor == .clear ? Mono.C.border : urgencyColor.opacity(0.7),
-                            lineWidth: urgencyColor == .clear ? 0.5 : 1.5
+                            urgencyColor == .clear ? Mono.C.borderBright.opacity(0.6) : urgencyColor.opacity(0.8),
+                            lineWidth: urgencyColor == .clear ? 0.8 : 1.5
                         )
                 )
-                .shadow(color: .black.opacity(0.5), radius: 28, x: 0, y: 12)
+                .shadow(color: .black.opacity(0.6), radius: 30, x: 0, y: 14)
         )
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .matchedTransitionSource(id: item.id, in: namespace)
@@ -1096,12 +1100,12 @@ struct GoalSwipeCreateCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Mono.G.cardSubtle)
+                .fill(Color(white: 0.10))
                 .overlay(
                     RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(Mono.C.border, lineWidth: 0.5)
+                        .strokeBorder(Mono.C.borderBright.opacity(0.5), lineWidth: 0.8)
                 )
-                .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 10)
+                .shadow(color: .black.opacity(0.5), radius: 24, x: 0, y: 10)
         )
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
