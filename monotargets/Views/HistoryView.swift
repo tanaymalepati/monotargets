@@ -184,10 +184,11 @@ struct HistoryView: View {
                             Image(systemName: showSearch ? "xmark" : "magnifyingglass")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(showSearch ? Mono.C.accent : Mono.C.textSec)
-                                .frame(width: 34, height: 34)
-                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
                                     .fill(showSearch ? Mono.C.accent.opacity(0.12) : Mono.C.surfaceUp)
-                                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .overlay(RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
                                         .strokeBorder(showSearch ? Mono.C.accent.opacity(0.4) : Mono.C.border, lineWidth: 0.5)))
                         }
                         .buttonStyle(.plain)
@@ -210,11 +211,11 @@ struct HistoryView: View {
                                     .font(Mono.T.mono(11, .medium))
                             }
                             .foregroundColor(Mono.C.textSec)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
                                 .fill(Mono.C.surfaceUp)
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .overlay(RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
                                     .strokeBorder(Mono.C.border, lineWidth: 0.5)))
                         }
                     }
@@ -255,14 +256,14 @@ struct HistoryView: View {
                     if typeFilter == .all || typeFilter == .outward {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 5) {
-                                MiniFilterPill(label: "All Categories", isSelected: categoryFilter == nil) {
+                                ToolbarFilterPill(label: "All Categories", isSelected: categoryFilter == nil) {
                                     withAnimation { categoryFilter = nil }
                                     Haptic.select()
                                 }
                                 ForEach(Transaction.Category.allCases.filter { !$0.isIncome }) { cat in
                                     let hasData = spendByCategory.contains { $0.0 == cat }
                                     if hasData {
-                                        MiniFilterPill(label: cat.label, isSelected: categoryFilter == cat) {
+                                        ToolbarFilterPill(label: cat.label, isSelected: categoryFilter == cat) {
                                             withAnimation { categoryFilter = (categoryFilter == cat) ? nil : cat }
                                             Haptic.select()
                                         }
@@ -491,7 +492,7 @@ struct TypeFilterChip: View {
             }
             .foregroundColor(isSelected ? Mono.C.bg : Mono.C.textSec)
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
             .background(
                 Capsule(style: .continuous)
                     .fill(isSelected ? Mono.C.text : Mono.C.surfaceUp)

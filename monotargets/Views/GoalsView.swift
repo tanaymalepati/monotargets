@@ -71,9 +71,9 @@ struct GoalsView: View {
                 .opacity(appeared ? 1 : 0)
                 .scaleEffect(appeared ? 1 : 0.94)
 
-                // ── Tab + Sort bar ──────────────────────────────────
-                HStack(spacing: 8) {
-                    // Tab pills
+                // ── Tab + Filter bar ────────────────────────────────
+                VStack(spacing: 8) {
+                    // Row 1: Tab switcher — full width
                     HStack(spacing: 4) {
                         GoalTabPill(label: "Active", count: activeItems.count, isSelected: activeTab == .active) {
                             withAnimation(.spring(duration: 0.25, bounce: 0.3)) { activeTab = .active }
@@ -85,51 +85,53 @@ struct GoalsView: View {
                         }
                     }
                     .padding(3)
+                    .frame(maxWidth: .infinity)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Mono.C.surfaceTop))
 
-                    Spacer()
-
+                    // Row 2: Filters + Sort (active tab only)
                     if activeTab == .active {
-                        // Filter pills
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 5) {
-                                ForEach(GoalFilter.allCases, id: \.self) { f in
-                                    MiniFilterPill(label: f.rawValue, isSelected: filterMode == f) {
-                                        withAnimation(.spring(duration: 0.2)) { filterMode = f }
-                                        Haptic.select()
+                        HStack(spacing: 6) {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 5) {
+                                    ForEach(GoalFilter.allCases, id: \.self) { f in
+                                        ToolbarFilterPill(label: f.rawValue, isSelected: filterMode == f) {
+                                            withAnimation(.spring(duration: 0.2)) { filterMode = f }
+                                            Haptic.select()
+                                        }
                                     }
                                 }
                             }
-                        }
-                        .frame(maxWidth: 160)
 
-                        // Sort button
-                        Menu {
-                            ForEach([GoalSort.progress, .targetDate, .remaining, .name], id: \.label) { s in
-                                Button {
-                                    withAnimation { sortMode = s }
-                                    Haptic.select()
-                                } label: {
-                                    Label(s.label, systemImage: sortMode == s ? "checkmark" : "")
+                            Spacer(minLength: 0)
+
+                            Menu {
+                                ForEach([GoalSort.progress, .targetDate, .remaining, .name], id: \.label) { s in
+                                    Button {
+                                        withAnimation { sortMode = s }
+                                        Haptic.select()
+                                    } label: {
+                                        Label(s.label, systemImage: sortMode == s ? "checkmark" : "")
+                                    }
                                 }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.up.arrow.down")
+                                        .font(.system(size: 11, weight: .semibold))
+                                    Text(sortMode.label)
+                                        .font(Mono.T.mono(11, .medium))
+                                }
+                                .foregroundColor(Mono.C.textSec)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
+                                        .fill(Mono.C.surfaceUp)
+                                        .overlay(RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
+                                            .strokeBorder(Mono.C.border, lineWidth: 0.5))
+                                )
                             }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "arrow.up.arrow.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text(sortMode.label)
-                                    .font(Mono.T.mono(11, .medium))
-                            }
-                            .foregroundColor(Mono.C.textSec)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
-                                    .fill(Mono.C.surfaceUp)
-                                    .overlay(RoundedRectangle(cornerRadius: Mono.R.small, style: .continuous)
-                                        .strokeBorder(Mono.C.border, lineWidth: 0.5))
-                            )
                         }
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
                 .padding(.horizontal, Mono.S.md)
@@ -349,8 +351,8 @@ struct GoalTabPill: View {
                 }
             }
             .foregroundColor(isSelected ? Mono.C.bg : Mono.C.textSec)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(isSelected ? Mono.C.text : .clear)
@@ -361,7 +363,8 @@ struct GoalTabPill: View {
     }
 }
 
-struct MiniFilterPill: View {
+// Unified filter pill used in both GoalsView (toolbar row) and HistoryView (category row)
+struct ToolbarFilterPill: View {
     let label: String
     let isSelected: Bool
     let action: () -> Void
@@ -369,20 +372,24 @@ struct MiniFilterPill: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(Mono.T.mono(10, .semibold))
-                .foregroundColor(isSelected ? Mono.C.accent : Mono.C.textTert)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .font(Mono.T.mono(11, .semibold))
+                .foregroundColor(isSelected ? Mono.C.accent : Mono.C.textSec)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
                 .background(
-                    Capsule()
-                        .fill(isSelected ? Mono.C.accent.opacity(0.12) : .clear)
-                        .overlay(Capsule().strokeBorder(isSelected ? Mono.C.accent.opacity(0.4) : Mono.C.border, lineWidth: 0.5))
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Mono.C.accent.opacity(0.12) : Mono.C.surfaceUp)
+                        .overlay(Capsule(style: .continuous)
+                            .strokeBorder(isSelected ? Mono.C.accent.opacity(0.45) : Mono.C.border, lineWidth: 0.5))
                 )
         }
         .buttonStyle(.plain)
         .animation(.spring(duration: 0.18), value: isSelected)
     }
 }
+
+// Legacy alias — HistoryView uses this name for the category sub-filter
+typealias MiniFilterPill = ToolbarFilterPill
 
 // MARK: - Goal Card (redesigned)
 
