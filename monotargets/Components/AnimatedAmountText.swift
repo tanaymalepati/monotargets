@@ -9,13 +9,16 @@ struct AnimatedAmountText: View {
     var weight: Font.Weight = .bold
     var color: Color = Mono.C.text
 
+    @AppStorage("currency_code") private var currencyCode = "INR"
+    private var symbol: String { CurrencyInfo.current.symbol }
+
     private var formatted: String {
         AmountFormatter.format(digits: digits)
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            Text("₹")
+            Text(symbol)
                 .font(.system(size: fontSize * 0.52, weight: weight, design: .monospaced))
                 .foregroundColor(color.opacity(0.6))
                 .baselineOffset(fontSize * 0.08)
@@ -48,6 +51,9 @@ struct AmountInputField: View {
     var fontSize: CGFloat = 52
     var showCursor: Bool = true
 
+    @AppStorage("currency_code") private var currencyCode = "INR"
+    private var symbol: String { CurrencyInfo.current.symbol }
+
     @State private var cursorVisible: Bool = true
 
     private var formatted: String {
@@ -57,7 +63,7 @@ struct AmountInputField: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                Text("₹")
+                Text(symbol)
                     .font(.system(size: fontSize * 0.52, weight: .bold, design: .monospaced))
                     .foregroundColor(digits.isEmpty ? Mono.C.textDim : Mono.C.text.opacity(0.6))
                     .baselineOffset(fontSize * 0.08)
@@ -113,6 +119,9 @@ struct MonoNumpad: View {
     @Binding var digits: String
     var maxDigits: Int = 12
     var showConfirmKey: Bool = true
+    /// Accent colour used for the brief flash on digit keys.
+    /// Pass `Mono.C.accent` for assign views, `Mono.C.red` for unassign views.
+    var accentColor: Color = Mono.C.textDim
 
     private let topKeys: [[String]] = [
         ["1", "2", "3"],
@@ -127,16 +136,16 @@ struct MonoNumpad: View {
             ForEach(topKeys, id: \.self) { row in
                 HStack(spacing: 10) {
                     ForEach(row, id: \.self) { key in
-                        NumpadKey(label: key) { handleKey(key) }
+                        NumpadKey(label: key, flashColor: accentColor) { handleKey(key) }
                     }
                 }
             }
             // Bottom row
             if showConfirmKey {
                 HStack(spacing: 10) {
-                    NumpadKey(label: "⌫") { handleKey("⌫") }
-                    NumpadKey(label: "0") { handleKey("0") }
-                    NumpadKey(label: "✓") { handleKey("✓") }
+                    NumpadKey(label: "⌫", flashColor: accentColor) { handleKey("⌫") }
+                    NumpadKey(label: "0", flashColor: accentColor) { handleKey("0") }
+                    NumpadKey(label: "✓", flashColor: accentColor) { handleKey("✓") }
                         .disabled(digits.isEmpty)
                 }
             } else {
@@ -144,9 +153,9 @@ struct MonoNumpad: View {
                     let spacing: CGFloat = 10
                     let colW = (geo.size.width - spacing * 2) / 3
                     HStack(spacing: spacing) {
-                        NumpadKey(label: "⌫") { handleKey("⌫") }
+                        NumpadKey(label: "⌫", flashColor: accentColor) { handleKey("⌫") }
                             .frame(width: colW)
-                        NumpadKey(label: "0") { handleKey("0") }
+                        NumpadKey(label: "0", flashColor: accentColor) { handleKey("0") }
                             .frame(width: colW * 2 + spacing)
                     }
                 }
@@ -182,22 +191,39 @@ struct MonoNumpad: View {
 
 struct NumpadKey: View {
     let label: String
+    /// Color the key briefly flashes when pressed (digit keys only).
+    var flashColor: Color = Mono.C.textDim
     let action: () -> Void
 
     @State private var pressed = false
+    @State private var flashOpacity: Double = 0
+    @State private var textLit = false
 
     var isSpecial: Bool { label == "⌫" || label == "✓" }
     var isConfirm: Bool { label == "✓" }
+    var isDigit:   Bool { !isSpecial }
 
     var body: some View {
         Button(action: {
-            withAnimation(.spring(duration: 0.12, bounce: 0.6)) { pressed = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.spring(duration: 0.2, bounce: 0.3)) { pressed = false }
+            // Push-in scale
+            withAnimation(.spring(duration: 0.09, bounce: 0.4)) { pressed = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
+                withAnimation(.spring(duration: 0.28, bounce: 0.55)) { pressed = false }
+            }
+            // Colour flash on digit keys
+            if isDigit {
+                withAnimation(.easeOut(duration: 0.04)) { flashOpacity = 1; textLit = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    withAnimation(.easeOut(duration: 0.28)) { flashOpacity = 0 }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+                    withAnimation(.easeOut(duration: 0.18)) { textLit = false }
+                }
             }
             action()
         }) {
             ZStack {
+                // Base fill
                 RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
                     .fill(isConfirm ? Mono.C.text : Mono.C.surfaceUp)
                     .overlay(
@@ -208,6 +234,13 @@ struct NumpadKey: View {
                             )
                     )
                     .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+
+                // Flash overlay (digit keys only)
+                if isDigit {
+                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        .fill(flashColor.opacity(flashOpacity * 0.20))
+                        .allowsHitTesting(false)
+                }
 
                 if label == "⌫" {
                     Image(systemName: "delete.left")
@@ -220,12 +253,17 @@ struct NumpadKey: View {
                 } else {
                     Text(label)
                         .font(Mono.T.mono(26, .medium))
-                        .foregroundColor(Mono.C.text)
+                        .foregroundColor(textLit ? flashColor : Mono.C.text)
                 }
             }
             .frame(maxWidth: .infinity)
             .frame(height: 64)
-            .scaleEffect(pressed ? 0.88 : 1.0)
+            .scaleEffect(pressed ? 0.86 : 1.0)
+            // Outer glow pops with the flash
+            .shadow(
+                color: isDigit ? flashColor.opacity(flashOpacity * 0.40) : .clear,
+                radius: 10, x: 0, y: 0
+            )
         }
         .buttonStyle(.plain)
     }

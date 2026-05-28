@@ -11,6 +11,7 @@ struct GoalDetailView: View {
     @State private var showEdit = false
     @State private var appeared = false
     @State private var itemToDelete: SavingsItem?
+    @AppStorage("vault_monochrome") private var isMonochrome = false
     @State private var showDeleteZone = false
     @State private var celebrateComplete = false
 
@@ -31,19 +32,9 @@ struct GoalDetailView: View {
                             .opacity(appeared ? 1 : 0)
                             .scaleEffect(appeared ? 1 : 0.93)
 
-                        // Action button — full width
+                        // Action buttons
                         Group {
-                            if !item.isFullyFunded {
-                                ActionButton(
-                                    icon: "arrow.right.circle.fill",
-                                    label: "Assign Funds",
-                                    filled: true,
-                                    isAccent: true
-                                ) {
-                                    showAssign = true
-                                    Haptic.medium()
-                                }
-                            } else {
+                            if item.isFullyFunded {
                                 HStack(spacing: 6) {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 14))
@@ -54,9 +45,85 @@ struct GoalDetailView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(
-                                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                    RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
                                         .fill(Mono.C.text)
                                 )
+                            } else if item.assignedAmount > 0 {
+                                // Side-by-side Unassign (red) + Assign (green)
+                                HStack(spacing: Mono.S.sm) {
+                                    Button {
+                                        showUnassign = true
+                                        Haptic.medium()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "arrow.left.circle.fill")
+                                                .font(.system(size: 14, weight: .semibold))
+                                            Text("Unassign")
+                                                .font(Mono.T.mono(14, .semibold))
+                                        }
+                                        .foregroundColor(isMonochrome ? Mono.C.negative : Mono.C.red)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                                                .fill(Mono.C.surfaceUp)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                                                        .strokeBorder(
+                                                            isMonochrome ? Mono.C.negative.opacity(0.4) : Mono.C.red.opacity(0.85),
+                                                            lineWidth: 1.0
+                                                        )
+                                                )
+                                                .shadow(
+                                                    color: isMonochrome ? .clear : Mono.C.red.opacity(0.28),
+                                                    radius: 10, x: -4, y: 0
+                                                )
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    Button {
+                                        showAssign = true
+                                        Haptic.medium()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "arrow.right.circle.fill")
+                                                .font(.system(size: 14, weight: .semibold))
+                                            Text("Assign")
+                                                .font(Mono.T.mono(14, .semibold))
+                                        }
+                                        .foregroundColor(isMonochrome ? Mono.C.text : Mono.C.accent)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                                                .fill(Mono.C.surfaceUp)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                                                        .strokeBorder(
+                                                            isMonochrome ? Mono.C.borderBright : Mono.C.accent.opacity(0.85),
+                                                            lineWidth: 1.0
+                                                        )
+                                                )
+                                                .shadow(
+                                                    color: isMonochrome ? .clear : Mono.C.accent.opacity(0.22),
+                                                    radius: 10, x: 4, y: 0
+                                                )
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            } else {
+                                // No funds assigned yet — full-width green Assign
+                                ActionButton(
+                                    icon: "arrow.right.circle.fill",
+                                    label: "Assign Funds",
+                                    filled: true,
+                                    isAccent: true
+                                ) {
+                                    showAssign = true
+                                    Haptic.medium()
+                                }
                             }
                         }
                         .padding(.horizontal, Mono.S.md)
@@ -68,6 +135,14 @@ struct GoalDetailView: View {
                             .opacity(appeared ? 1 : 0)
                             .offset(y: appeared ? 0 : 20)
 
+                        // Goal Boost section
+                        if !item.isFullyFunded {
+                            GoalBoostSection(item: item)
+                                .padding(.horizontal, Mono.S.md)
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 20)
+                        }
+
                         // Transaction history for this goal
                         if !store.transactionsForItem(itemID).isEmpty {
                             GoalTransactionHistory(itemID: itemID)
@@ -76,18 +151,15 @@ struct GoalDetailView: View {
                                 .offset(y: appeared ? 0 : 24)
                         }
 
-                        // Unassign / Delete
+                        // Reminder section
+                        GoalReminderSection(item: item)
+                            .padding(.horizontal, Mono.S.md)
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 24)
+                            .id("\(item.id)-\(item.monthlyReminderDay ?? -1)")
+
+                        // Delete zone
                         VStack(spacing: 8) {
-                            if item.assignedAmount > 0 {
-                                ActionButton(
-                                    icon: "arrow.left.circle.fill",
-                                    label: "Unassign Funds",
-                                    filled: false
-                                ) {
-                                    showUnassign = true
-                                    Haptic.medium()
-                                }
-                            }
                             if showDeleteZone {
                                 DangerButton(icon: "trash", label: "Delete Goal") {
                                     itemToDelete = item
@@ -221,13 +293,24 @@ struct GoalDetailHero: View {
                 ProgressRing(progress: item.progress, size: 100, lineWidth: 5)
 
                 ZStack {
-                    Circle()
-                        .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceUp)
-                        .frame(width: 74, height: 74)
+                    if let data = item.photoData, let uiImg = UIImage(data: data) {
+                        Image(uiImage: uiImg)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 74, height: 74)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle().strokeBorder(Mono.C.borderBright.opacity(0.4), lineWidth: 0.5)
+                            )
+                    } else {
+                        Circle()
+                            .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceUp)
+                            .frame(width: 74, height: 74)
 
-                    Image(systemName: item.icon)
-                        .font(.system(size: 30, weight: .medium))
-                        .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
+                        Image(systemName: item.icon)
+                            .font(.system(size: 30, weight: .medium))
+                            .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
+                    }
                 }
             }
             .padding(.top, Mono.S.md)
@@ -273,6 +356,9 @@ struct GoalDetailHero: View {
 struct GoalStatsGrid: View {
     let item: SavingsItem
 
+    @Environment(AppStore.self) private var store
+    @AppStorage("smart_eta_enabled") private var etaEnabled = true
+
     var body: some View {
         VStack(spacing: 1) {
             HStack(spacing: 1) {
@@ -308,6 +394,12 @@ struct GoalStatsGrid: View {
                         .frame(maxWidth: .infinity)
                 }
             }
+
+            if etaEnabled, !item.isFullyFunded, let eta = store.goalETA(for: item.id) {
+                MonoDivider()
+                StatCell(label: "Smart ETA", value: eta, icon: "clock.arrow.2.circlepath")
+                    .frame(maxWidth: .infinity)
+            }
         }
         .monoCard()
     }
@@ -340,21 +432,353 @@ struct GoalTransactionHistory: View {
     @Environment(AppStore.self) private var store
     let itemID: UUID
 
+    private var transactions: [Transaction] {
+        Array(store.transactionsForItem(itemID).prefix(8))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Mono.S.md) {
             OverlineLabel(text: "Transactions", opacity: 0.45)
                 .padding(.horizontal, 4)
 
             VStack(spacing: 1) {
-                ForEach(Array(store.transactionsForItem(itemID).prefix(8).enumerated()), id: \.element.id) { index, t in
+                ForEach(Array(transactions.enumerated()), id: \.element.id) { index, t in
                     TransactionRowView(transaction: t)
                         .padding(.horizontal, Mono.S.md)
-                    if index < store.transactionsForItem(itemID).prefix(8).count - 1 {
+                    if index < transactions.count - 1 {
                         MonoDivider().padding(.horizontal, Mono.S.lg)
                     }
                 }
             }
             .monoCard()
+        }
+    }
+}
+
+// MARK: - Reminder Section
+
+struct GoalReminderSection: View {
+    @Environment(AppStore.self) private var store
+    let item: SavingsItem
+
+    @State private var isEnabled: Bool
+    @State private var day: Int
+
+    init(item: SavingsItem) {
+        self.item = item
+        _isEnabled = State(initialValue: item.monthlyReminderDay != nil)
+        _day       = State(initialValue: item.monthlyReminderDay ?? 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Mono.S.md) {
+            OverlineLabel(text: "Reminders", opacity: 0.45)
+                .padding(.horizontal, 4)
+
+            VStack(spacing: 0) {
+                // Toggle row
+                HStack(spacing: Mono.S.md) {
+                    Image(systemName: "bell.fill")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(Mono.C.textSec)
+                        .frame(width: 22)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Monthly Reminder")
+                            .font(Mono.T.mono(15, .medium))
+                            .foregroundColor(Mono.C.text)
+                        Text(isEnabled ? "Reminds you on the \(ordinal(day)) of each month" : "Off")
+                            .font(Mono.T.mono(11, .regular))
+                            .foregroundColor(Mono.C.textDim)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $isEnabled)
+                        .tint(Mono.C.text)
+                        .labelsHidden()
+                        .onChange(of: isEnabled) { _, enabled in
+                            var updated = item
+                            if enabled {
+                                store.requestNotificationPermission()
+                                updated.monthlyReminderDay = day
+                                store.updateSavingsItem(updated)
+                                store.scheduleReminder(for: updated)
+                            } else {
+                                updated.monthlyReminderDay = nil
+                                store.updateSavingsItem(updated)
+                                store.cancelReminder(for: item.id)
+                            }
+                            Haptic.select()
+                        }
+                }
+                .padding(Mono.S.md)
+
+                if isEnabled {
+                    MonoDivider().padding(.horizontal, Mono.S.md)
+
+                    // Day picker row
+                    HStack(spacing: Mono.S.md) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(Mono.C.textSec)
+                            .frame(width: 22)
+
+                        Text("Remind on day")
+                            .font(Mono.T.mono(15, .medium))
+                            .foregroundColor(Mono.C.text)
+
+                        Spacer()
+
+                        // Minus
+                        Button {
+                            if day > 1 {
+                                day -= 1
+                                commitDayChange()
+                                Haptic.light()
+                            }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundColor(Mono.C.textSec)
+                        }
+                        .buttonStyle(.plain)
+
+                        Text("\(day)")
+                            .font(Mono.T.mono(20, .bold))
+                            .foregroundColor(Mono.C.text)
+                            .frame(width: 32, alignment: .center)
+
+                        // Plus
+                        Button {
+                            if day < 28 {
+                                day += 1
+                                commitDayChange()
+                                Haptic.light()
+                            }
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundColor(Mono.C.textSec)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(Mono.S.md)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .monoCard()
+            .animation(.spring(duration: 0.3, bounce: 0.2), value: isEnabled)
+        }
+    }
+
+    private func commitDayChange() {
+        var updated = item
+        updated.monthlyReminderDay = day
+        store.updateSavingsItem(updated)
+        store.scheduleReminder(for: updated)
+    }
+
+    private func ordinal(_ n: Int) -> String {
+        let suffix: String
+        switch n % 10 {
+        case 1 where n % 100 != 11: suffix = "st"
+        case 2 where n % 100 != 12: suffix = "nd"
+        case 3 where n % 100 != 13: suffix = "rd"
+        default: suffix = "th"
+        }
+        return "\(n)\(suffix)"
+    }
+}
+
+// MARK: - Goal Boost Section
+
+struct GoalBoostSection: View {
+    @Environment(AppStore.self) private var store
+    let item: SavingsItem
+
+    @State private var showBoostSheet = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Mono.S.md) {
+            OverlineLabel(text: "Goal Boost", opacity: 0.45)
+                .padding(.horizontal, 4)
+
+            if item.isBoostActive {
+                // Active boost state
+                VStack(spacing: 0) {
+                    HStack(spacing: Mono.S.md) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: Mono.R.icon, style: .continuous)
+                                .fill(Mono.C.accent.opacity(0.15))
+                                .frame(width: 44, height: 44)
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(Mono.C.accent)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Boost Active")
+                                .font(Mono.T.mono(14, .semibold))
+                                .foregroundColor(Mono.C.text)
+                            if let target = item.boostTarget {
+                                Text("Target: \(target.indianFormattedCompact) in \(item.boostDaysRemaining)d")
+                                    .font(Mono.T.mono(11, .regular))
+                                    .foregroundColor(Mono.C.textTert)
+                            }
+                        }
+
+                        Spacer()
+
+                        Text("\(item.boostDaysRemaining)d")
+                            .font(Mono.T.mono(18, .bold))
+                            .foregroundColor(item.boostDaysRemaining <= 2 ? Mono.C.red : Mono.C.accent)
+                    }
+                    .padding(Mono.S.md)
+
+                    MonoDivider().padding(.horizontal, Mono.S.md)
+
+                    Button {
+                        withAnimation(.spring(duration: 0.3)) {
+                            store.clearBoost(for: item.id)
+                        }
+                        Haptic.medium()
+                    } label: {
+                        Text("End Boost")
+                            .font(Mono.T.mono(12, .medium))
+                            .foregroundColor(Mono.C.textTert)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .monoCard()
+                .overlay(
+                    RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous)
+                        .strokeBorder(Mono.C.accent.opacity(0.4), lineWidth: 1)
+                )
+            } else {
+                // Inactive — invite to boost
+                Button {
+                    showBoostSheet = true
+                    Haptic.medium()
+                } label: {
+                    HStack(spacing: Mono.S.md) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: Mono.R.icon, style: .continuous)
+                                .fill(Mono.C.surfaceUp)
+                                .frame(width: 44, height: 44)
+                            Image(systemName: "bolt")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(Mono.C.textTert)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Start a 7-Day Boost")
+                                .font(Mono.T.mono(14, .semibold))
+                                .foregroundColor(Mono.C.text)
+                            Text("Commit to a target amount in 7 days")
+                                .font(Mono.T.mono(11, .regular))
+                                .foregroundColor(Mono.C.textTert)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Mono.C.textDim)
+                    }
+                    .padding(Mono.S.md)
+                    .monoCard()
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .sheet(isPresented: $showBoostSheet) {
+            GoalBoostSetupSheet(item: item)
+                .presentationDetents([.fraction(0.55)])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground(Color(white: 0.065))
+                .presentationCornerRadius(24)
+        }
+    }
+}
+
+// MARK: - Boost Setup Sheet
+
+struct GoalBoostSetupSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let item: SavingsItem
+
+    @State private var digits = ""
+
+    private var amount: Double { AmountFormatter.toDoubleFromDigits(digits) }
+    private var isValid: Bool  { amount > 0 && amount <= item.remaining }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color(white: 0.40))
+                .frame(width: 44, height: 6)
+                .padding(.top, 14)
+                .padding(.bottom, 16)
+
+            HStack {
+                Text("7-Day Boost")
+                    .font(Mono.T.mono(16, .bold))
+                    .foregroundColor(Mono.C.text)
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .font(Mono.T.mono(14, .medium))
+                    .foregroundColor(Mono.C.textSec)
+            }
+            .padding(.horizontal, Mono.S.lg)
+            .padding(.bottom, Mono.S.sm)
+
+            Text("Commit to saving \(item.name.isEmpty ? "this goal" : item.name) by a target amount within 7 days.")
+                .font(Mono.T.mono(12, .regular))
+                .foregroundColor(Mono.C.textTert)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Mono.S.xl)
+                .padding(.bottom, Mono.S.md)
+
+            AmountInputField(digits: $digits, fontSize: 44)
+                .padding(.horizontal, Mono.S.xl)
+                .padding(.bottom, Mono.S.md)
+
+            // Quick amounts
+            HStack(spacing: 8) {
+                ForEach([item.remaining * 0.25, item.remaining * 0.5, item.remaining], id: \.self) { amt in
+                    QuickAmountPill(amount: amt) {
+                        withAnimation(.spring(duration: 0.2)) { digits = String(Int(amt)) }
+                        Haptic.light()
+                    }
+                }
+            }
+            .padding(.horizontal, Mono.S.md)
+            .padding(.bottom, Mono.S.lg)
+
+            Button {
+                guard isValid else { Haptic.error(); return }
+                store.activateBoost(for: item.id, target: amount)
+                Haptic.success()
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill").font(.system(size: 14))
+                    Text("Start Boost").font(Mono.T.mono(15, .semibold))
+                }
+                .foregroundColor(isValid ? Mono.C.bg : Mono.C.textTert)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                        .fill(isValid ? Mono.C.accent : Mono.C.surfaceTop)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, Mono.S.lg)
         }
     }
 }
@@ -387,10 +811,10 @@ struct ActionButton: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
                     .fill(activeFill)
                     .overlay(
-                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
                             .strokeBorder(filled ? .clear : Mono.C.border, lineWidth: 0.5)
                     )
                     .shadow(
@@ -420,10 +844,10 @@ struct DangerButton: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
                     .fill(Mono.C.surfaceUp)
                     .overlay(
-                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
                             .strokeBorder(Mono.C.border.opacity(0.5), lineWidth: 0.5)
                     )
             )
