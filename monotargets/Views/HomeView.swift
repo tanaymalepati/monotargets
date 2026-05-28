@@ -42,14 +42,8 @@ struct HomeView: View {
                             .opacity(cardsOffset == 0 ? 1 : 0)
                     }
 
-                    // ── Spending Insights ────────────────────────────
-                    SpendingInsightsCard()
-                        .padding(.horizontal, Mono.S.md)
-                        .offset(y: cardsOffset)
-                        .opacity(cardsOffset == 0 ? 1 : 0)
-
-                    // ── Savings Health (sparkline + projection) ──────
-                    SavingsHealthCard()
+                    // ── Monthly Overview (spending + health combined) ─
+                    MonthlyOverviewCard()
                         .padding(.horizontal, Mono.S.md)
                         .offset(y: cardsOffset)
                         .opacity(cardsOffset == 0 ? 1 : 0)
@@ -211,63 +205,79 @@ struct VaultHeroCard: View {
 
 struct StreakLevelRow: View {
     @Environment(AppStore.self) private var store
-    @AppStorage("vault_monochrome") private var isMonochrome = false
 
     var body: some View {
         HStack(spacing: 10) {
             // Streak card
-            HStack(spacing: 10) {
-                StreakBadge(streakCount: store.streakCount, size: .medium)
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("Best: \(store.longestStreak)")
-                        .font(Mono.T.mono(10, .regular))
-                        .foregroundColor(Mono.C.textTert)
-                    Text("days")
-                        .font(Mono.T.mono(9, .regular))
-                        .foregroundColor(Mono.C.textTert)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    Image(systemName: store.streakCount > 0 ? "flame.fill" : "flame")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(
+                            store.streakCount > 0
+                                ? LinearGradient(colors: [Color(red:1,green:0.65,blue:0), Color(red:1,green:0.3,blue:0)], startPoint:.top, endPoint:.bottom)
+                                : LinearGradient(colors: [Mono.C.textTert], startPoint:.top, endPoint:.bottom)
+                        )
+                    Text("\(store.streakCount)")
+                        .font(Mono.T.mono(26, .bold))
+                        .foregroundColor(Mono.C.text)
+                        .contentTransition(.numericText(countsDown: false))
+                }
+                Text("day streak")
+                    .font(Mono.T.mono(10, .regular))
+                    .foregroundColor(Mono.C.textTert)
+                    .padding(.top, 2)
+                Spacer(minLength: 0)
+                HStack(spacing: 3) {
+                    Image(systemName: "medal")
+                        .font(.system(size: 9))
+                        .foregroundColor(Mono.C.textDim)
+                    Text("Best \(store.longestStreak)d")
+                        .font(Mono.T.mono(9, .medium))
+                        .foregroundColor(Mono.C.textDim)
                 }
             }
-            .padding(.horizontal, Mono.S.md)
-            .padding(.vertical, 14)
+            .padding(Mono.S.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 96)
             .monoCard()
-            .frame(maxWidth: .infinity)
 
             // Level card
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 5) {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(Mono.C.accent)
                     Text("LVL \(store.currentLevel.number)")
                         .font(Mono.T.mono(13, .bold))
                         .foregroundColor(Mono.C.text)
                 }
                 Text(store.currentLevel.title)
-                    .font(Mono.T.mono(10, .regular))
+                    .font(Mono.T.mono(11, .regular))
                     .foregroundColor(Mono.C.textSec)
-                    .lineLimit(1)
-
-                // XP progress
+                    .padding(.top, 3)
+                Spacer(minLength: 0)
+                // XP bar
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2).fill(Mono.C.surfaceTop)
+                        RoundedRectangle(cornerRadius: 2).fill(Mono.C.surfaceTop).frame(height: 4)
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Mono.C.accent)
-                            .frame(width: geo.size.width * store.levelProgress)
+                            .fill(LinearGradient(colors: [Mono.C.accent, Mono.C.accent.opacity(0.6)],
+                                                 startPoint: .leading, endPoint: .trailing))
+                            .frame(width: geo.size.width * store.levelProgress, height: 4)
                             .animation(.spring(duration: 0.8, bounce: 0.2), value: store.levelProgress)
                     }
                 }
                 .frame(height: 4)
-
                 Text("\(store.totalXP) XP")
                     .font(Mono.T.mono(9, .medium))
                     .foregroundColor(Mono.C.textDim)
+                    .padding(.top, 4)
             }
-            .padding(.horizontal, Mono.S.md)
-            .padding(.vertical, 14)
+            .padding(Mono.S.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 96)
             .monoCard()
-            .frame(maxWidth: .infinity)
         }
     }
 }
@@ -371,6 +381,97 @@ private struct RecapStat: View {
 }
 
 // MARK: - Savings Health Card (sparkline + projection)
+
+// MARK: - Monthly Overview Card (spending + sparkline combined)
+
+struct MonthlyOverviewCard: View {
+    @Environment(AppStore.self) private var store
+    @AppStorage("vault_monochrome") private var isMonochrome = false
+
+    private var rate: Int { Int(store.thisMonthSavingsRate * 100) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                OverlineLabel(text: "This Month", opacity: 0.45)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: rate >= 0 ? "arrow.up.right" : "arrow.down.right")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("\(abs(rate))% savings rate")
+                        .font(Mono.T.mono(10, .medium))
+                }
+                .foregroundColor(rate >= 30 ? (isMonochrome ? Mono.C.positive : Mono.C.accent) : Mono.C.textDim)
+            }
+            .padding(.horizontal, Mono.S.md)
+            .padding(.top, Mono.S.md)
+            .padding(.bottom, Mono.S.sm)
+
+            // IN / OUT / NET row
+            HStack(spacing: 0) {
+                InsightStat(label: "In",  amount: store.thisMonthInflow,
+                            color: isMonochrome ? Mono.C.positive : Mono.C.accent,
+                            icon: "arrow.down.circle.fill").frame(maxWidth: .infinity)
+                Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 44)
+                InsightStat(label: "Out", amount: store.thisMonthOutflow,
+                            color: isMonochrome ? Mono.C.negative : Mono.C.red,
+                            icon: "arrow.up.circle.fill").frame(maxWidth: .infinity)
+                Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 44)
+                InsightStat(label: "Net", amount: abs(store.thisMonthNet),
+                            color: store.thisMonthNet >= 0 ? (isMonochrome ? Mono.C.positive : Mono.C.accent) : (isMonochrome ? Mono.C.negative : Mono.C.red),
+                            icon: store.thisMonthNet >= 0 ? "plus" : "minus").frame(maxWidth: .infinity)
+            }
+            .padding(.bottom, Mono.S.sm)
+
+            // Category top-3
+            if !store.thisMonthSpendByCategory.isEmpty {
+                MonoDivider().padding(.horizontal, Mono.S.md)
+                let top   = Array(store.thisMonthSpendByCategory.prefix(3))
+                let total = top.reduce(0.0) { $0 + $1.1 }
+                HStack(spacing: 4) {
+                    ForEach(Array(top.enumerated()), id: \.offset) { i, pair in
+                        let pct = total > 0 ? pair.1 / total : 0
+                        HStack(spacing: 3) {
+                            Image(systemName: pair.0.icon).font(.system(size: 9, weight: .medium))
+                            Text(pair.0.label).font(Mono.T.mono(9, .medium))
+                            Text("\(Int(pct * 100))%").font(Mono.T.mono(9, .regular)).foregroundColor(Mono.C.textDim)
+                        }
+                        .foregroundColor(i == 0 ? (isMonochrome ? Mono.C.textSec : Mono.C.red.opacity(0.9)) : Mono.C.textTert)
+                        if i < top.count - 1 { Spacer() }
+                    }
+                }
+                .padding(.horizontal, Mono.S.md)
+                .padding(.vertical, Mono.S.sm)
+            }
+
+            MonoDivider().padding(.horizontal, Mono.S.md)
+
+            // Sparkline + projection
+            HStack(alignment: .center, spacing: Mono.S.md) {
+                VStack(alignment: .leading, spacing: 3) {
+                    OverlineLabel(text: "8-week trend", opacity: 0.35)
+                    SparklineChart(values: store.eightWeekSparkline, height: 36)
+                }
+                .frame(maxWidth: .infinity)
+
+                Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 52)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    OverlineLabel(text: "12M Proj.", opacity: 0.35)
+                    Text(store.twelveMonthProjection.indianFormattedCompact)
+                        .font(Mono.T.mono(18, .bold))
+                        .foregroundColor(Mono.C.textSec)
+                        .minimumScaleFactor(0.7)
+                }
+                .frame(width: 90, alignment: .trailing)
+            }
+            .padding(.horizontal, Mono.S.md)
+            .padding(.vertical, Mono.S.md)
+        }
+        .monoCard()
+    }
+}
 
 struct SavingsHealthCard: View {
     @Environment(AppStore.self) private var store
