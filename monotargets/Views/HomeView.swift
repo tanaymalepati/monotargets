@@ -264,7 +264,7 @@ struct StreakLevelRow: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(LinearGradient(colors: [Mono.C.accent, Mono.C.accent.opacity(0.6)],
                                                  startPoint: .leading, endPoint: .trailing))
-                            .frame(width: geo.size.width * store.levelProgress, height: 4)
+                            .frame(width: max(geo.size.width * store.levelProgress, 0), height: 4)
                             .animation(.spring(duration: 0.8, bounce: 0.2), value: store.levelProgress)
                     }
                 }

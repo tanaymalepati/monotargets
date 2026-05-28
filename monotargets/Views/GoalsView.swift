@@ -499,7 +499,7 @@ struct GoalCard: View {
                                 LinearGradient(colors: [Mono.C.accent.opacity(0.7), Mono.C.accent],
                                                startPoint: .leading, endPoint: .trailing)
                             )
-                            .frame(width: geo.size.width * item.progress)
+                            .frame(width: max(geo.size.width * item.progress, 0))
                     }
                 }
                 .frame(height: 3)
