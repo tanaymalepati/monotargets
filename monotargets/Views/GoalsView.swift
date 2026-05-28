@@ -259,7 +259,8 @@ struct GoalsView: View {
                                 items: activeItems,
                                 namespace: zoomNamespace,
                                 appeared: appeared,
-                                onTap: { selectedItem = $0 }
+                                onTap: { selectedItem = $0 },
+                                onAdd: { showCreateGoal = true }
                             )
                         }
                     }
@@ -286,8 +287,8 @@ struct GoalsView: View {
                 }
             }
 
-            // ── FAB ─────────────────────────────────────────────────
-            if activeTab == .active {
+            // ── FAB (hidden in swipe mode — "+" is the last swipe card) ──
+            if activeTab == .active && layoutMode != .swipe {
                 HStack {
                     Spacer()
                     Button {
@@ -743,34 +744,366 @@ struct GoalSwipeLayout: View {
     let namespace: Namespace.ID
     let appeared: Bool
     let onTap: (SavingsItem) -> Void
+    let onAdd: () -> Void
 
     @State private var currentPage = 0
 
+    // Cap visible dots at 7; beyond that show "n/total"
+    private var showDots: Bool { items.count <= 7 }
+
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 10) {
             TabView(selection: $currentPage) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-                    GoalCard(item: item, namespace: namespace) { onTap(item) }
-                        .padding(.horizontal, Mono.S.lg)
-                        .padding(.vertical, Mono.S.sm)
+                    GoalSwipeCard(item: item, namespace: namespace) { onTap(item) }
+                        .padding(.horizontal, 16)
                         .tag(idx)
                 }
+                // "+" create card at end of deck
+                GoalSwipeCreateCard(onAdd: onAdd)
+                    .padding(.horizontal, 16)
+                    .tag(items.count)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(maxHeight: .infinity)
             .opacity(appeared ? 1 : 0)
 
-            // Dot indicator
-            HStack(spacing: 6) {
-                ForEach(0..<items.count, id: \.self) { i in
-                    Circle()
-                        .fill(i == currentPage ? Mono.C.text : Mono.C.textDim)
-                        .frame(width: i == currentPage ? 7 : 5, height: i == currentPage ? 7 : 5)
-                        .animation(.spring(duration: 0.22, bounce: 0.4), value: currentPage)
+            // Page indicator
+            if showDots {
+                HStack(spacing: 5) {
+                    ForEach(0..<(items.count + 1), id: \.self) { i in
+                        let isCurrent = i == currentPage
+                        let isCreate  = i == items.count
+                        Capsule(style: .continuous)
+                            .fill(isCreate
+                                  ? (isCurrent ? Mono.C.accent : Mono.C.textDim)
+                                  : (isCurrent ? Mono.C.text   : Mono.C.textDim))
+                            .frame(width: isCurrent ? 18 : 6, height: 6)
+                            .animation(.spring(duration: 0.28, bounce: 0.4), value: currentPage)
+                    }
+                }
+                .padding(.bottom, 104)
+            } else {
+                Text("\(currentPage + 1) / \(items.count + 1)")
+                    .font(Mono.T.mono(11, .medium))
+                    .foregroundColor(Mono.C.textDim)
+                    .padding(.bottom, 104)
+            }
+        }
+    }
+}
+
+// MARK: - Swipe Card (large, full-height)
+
+struct GoalSwipeCard: View {
+    let item: SavingsItem
+    let namespace: Namespace.ID
+    let onTap: () -> Void
+
+    @Environment(AppStore.self) private var store
+    @AppStorage("smart_eta_enabled") private var etaEnabled = true
+    @AppStorage("vault_monochrome")  private var isMonochrome = false
+    @State private var barAppeared = false
+
+    private var accentColor: Color { item.isFullyFunded ? Mono.C.text : Mono.C.accent }
+
+    private var urgencyColor: Color {
+        guard let days = item.daysUntilTarget else { return .clear }
+        if days < 0   { return Mono.C.red }
+        if days <= 14 { return Color(red: 1, green: 0.55, blue: 0) }
+        return .clear
+    }
+
+    private var stats: [(String, String, String)] {
+        var result: [(String, String, String)] = []
+        result.append(("Remaining", item.remaining.indianFormattedCompact, "minus.circle"))
+        if let days = item.daysUntilTarget {
+            let label = days < 0 ? "Overdue" : (days == 0 ? "Today!" : "\(days) days")
+            result.append(("Deadline", label, "calendar"))
+        } else if etaEnabled, let eta = store.goalETA(for: item.id) {
+            result.append(("ETA", eta, "clock"))
+        }
+        if item.isBoostActive {
+            result.append(("Boost", "\(item.boostDaysRemaining)d left", "bolt.fill"))
+        } else if let cat = item.goalCategory {
+            result.append((cat.label, "", cat.icon))
+        }
+        return Array(result.prefix(3))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+
+            // ── Top strip: category + star ───────────────
+            HStack {
+                if let cat = item.goalCategory {
+                    HStack(spacing: 4) {
+                        Image(systemName: cat.icon)
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(cat.label)
+                            .font(Mono.T.mono(10, .semibold))
+                    }
+                    .foregroundColor(cat.color)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(cat.color.opacity(0.12))
+                            .overlay(Capsule().strokeBorder(cat.color.opacity(0.3), lineWidth: 0.5))
+                    )
+                } else {
+                    Spacer()
+                }
+                Spacer()
+                if item.isFavorite {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Mono.C.accent.opacity(0.9))
+                }
+                if item.isBoostActive {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(Mono.C.accent)
+                        .padding(.leading, 6)
                 }
             }
-            .padding(.bottom, 110)
+            .padding(.horizontal, 22)
+            .padding(.top, 22)
+            .padding(.bottom, 10)
+
+            // ── Hero icon ─────────────────────────────────
+            ZStack {
+                if let data = item.photoData, let ui = UIImage(data: data) {
+                    Image(uiImage: ui)
+                        .resizable().scaledToFill()
+                        .frame(width: 108, height: 108)
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceTop)
+                        .frame(width: 108, height: 108)
+                        .overlay(
+                            Image(systemName: item.icon)
+                                .font(.system(size: 44, weight: .medium))
+                                .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
+                        )
+                }
+            }
+            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 8)
+            .padding(.bottom, 20)
+
+            // ── Goal name ─────────────────────────────────
+            Text(item.name)
+                .font(Mono.T.mono(26, .bold))
+                .foregroundColor(Mono.C.text)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .padding(.horizontal, 22)
+
+            if !item.itemDescription.isEmpty {
+                Text(item.itemDescription)
+                    .font(Mono.T.mono(13, .regular))
+                    .foregroundColor(Mono.C.textTert)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 22)
+                    .padding(.top, 4)
+            }
+
+            // ── Giant percentage ──────────────────────────
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text("\(Int(item.progress * 100))")
+                    .font(Mono.T.mono(80, .bold))
+                    .foregroundColor(item.progress > 0 ? accentColor : Mono.C.textDim)
+                    .contentTransition(.numericText(countsDown: false))
+                    .shadow(color: item.progress > 0 ? accentColor.opacity(0.25) : .clear, radius: 20)
+                Text("%")
+                    .font(Mono.T.mono(32, .semibold))
+                    .foregroundColor(Mono.C.textTert)
+                    .baselineOffset(6)
+            }
+            .padding(.top, 4)
+
+            Spacer(minLength: 0)
+
+            // ── Amounts + progress bar ─────────────────────
+            VStack(spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        OverlineLabel(text: "Saved", opacity: 0.45)
+                        Text(item.assignedAmount.indianFormattedCompact)
+                            .font(Mono.T.mono(20, .bold))
+                            .foregroundColor(Mono.C.text)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        OverlineLabel(text: "Target", opacity: 0.45)
+                        Text(item.targetAmount.indianFormattedCompact)
+                            .font(Mono.T.mono(20, .semibold))
+                            .foregroundColor(Mono.C.textSec)
+                    }
+                }
+                .padding(.horizontal, 22)
+
+                // Thick animated progress bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Mono.C.surfaceTop)
+                            .frame(height: 10)
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(LinearGradient(
+                                colors: [accentColor.opacity(0.6), accentColor],
+                                startPoint: .leading, endPoint: .trailing
+                            ))
+                            .frame(width: max(geo.size.width * (barAppeared ? item.progress : 0), 0), height: 10)
+                            .animation(.spring(duration: 1.0, bounce: 0.1).delay(0.15), value: barAppeared)
+                    }
+                }
+                .frame(height: 10)
+                .padding(.horizontal, 22)
+                .onAppear { barAppeared = true }
+                .onDisappear { barAppeared = false }
+            }
+
+            // ── Stats row ─────────────────────────────────
+            if !stats.isEmpty {
+                HStack(spacing: 0) {
+                    ForEach(Array(stats.enumerated()), id: \.offset) { i, stat in
+                        VStack(spacing: 3) {
+                            Image(systemName: stat.2)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(
+                                    stat.0 == "Overdue" ? Mono.C.red :
+                                    (stat.0 == "Boost" ? Mono.C.accent : Mono.C.textDim)
+                                )
+                            if !stat.1.isEmpty {
+                                Text(stat.1)
+                                    .font(Mono.T.mono(12, .semibold))
+                                    .foregroundColor(
+                                        stat.0 == "Overdue" ? Mono.C.red :
+                                        (stat.0 == "Boost" ? Mono.C.accent : Mono.C.text)
+                                    )
+                                    .minimumScaleFactor(0.8)
+                                    .lineLimit(1)
+                            }
+                            Text(stat.0.uppercased())
+                                .font(Mono.T.mono(8, .medium))
+                                .foregroundColor(Mono.C.textDim)
+                                .tracking(0.8)
+                        }
+                        .frame(maxWidth: .infinity)
+                        if i < stats.count - 1 {
+                            Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 36)
+                        }
+                    }
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 14)
+            }
+
+            // ── Open Goal button ──────────────────────────
+            Button(action: { onTap(); Haptic.medium() }) {
+                HStack(spacing: 8) {
+                    Text("Open Goal")
+                        .font(Mono.T.mono(15, .semibold))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundColor(Mono.C.bg)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        .fill(Mono.C.text)
+                        .shadow(color: .white.opacity(0.08), radius: 12)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 22)
+            .padding(.top, 18)
+            .padding(.bottom, 22)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Mono.G.cardSubtle)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(
+                            urgencyColor == .clear ? Mono.C.border : urgencyColor.opacity(0.7),
+                            lineWidth: urgencyColor == .clear ? 0.5 : 1.5
+                        )
+                )
+                .shadow(color: .black.opacity(0.5), radius: 28, x: 0, y: 12)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .matchedTransitionSource(id: item.id, in: namespace)
+    }
+}
+
+// MARK: - Swipe "Add" Card (last in deck)
+
+struct GoalSwipeCreateCard: View {
+    let onAdd: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            VStack(spacing: 20) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Mono.C.surfaceTop)
+                        .frame(width: 96, height: 96)
+                    Image(systemName: "plus")
+                        .font(.system(size: 40, weight: .medium))
+                        .foregroundColor(Mono.C.textDim)
+                }
+
+                VStack(spacing: 6) {
+                    Text("New Goal")
+                        .font(Mono.T.mono(24, .bold))
+                        .foregroundColor(Mono.C.text)
+                    Text("Start saving for something new")
+                        .font(Mono.T.mono(13, .regular))
+                        .foregroundColor(Mono.C.textTert)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, 22)
+            Spacer()
+
+            Button(action: { onAdd(); Haptic.medium() }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Create Goal")
+                        .font(Mono.T.mono(15, .semibold))
+                }
+                .foregroundColor(Mono.C.bg)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                        .fill(Mono.C.text)
+                        .shadow(color: .white.opacity(0.08), radius: 12)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 22)
+            .padding(.bottom, 22)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Mono.G.cardSubtle)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(Mono.C.border, lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 10)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 }
 
