@@ -285,7 +285,7 @@ struct HistoryView: View {
                         Image(systemName: searchText.isEmpty ? "clock.arrow.circlepath" : "magnifyingglass")
                             .font(.system(size: 32, weight: .light))
                             .foregroundColor(Mono.C.textDim)
-                        Text(searchText.isEmpty ? "No transactions" : "No results for "\(searchText)"")
+                        Text(searchText.isEmpty ? "No transactions" : "No results for \"\(searchText)\"")
                             .font(Mono.T.mono(15, .semibold))
                             .foregroundColor(Mono.C.textSec)
                         Text(searchText.isEmpty ? "Nothing here for this period" : "Try a different search term")
@@ -664,13 +664,3 @@ private struct FooterStat: View {
     }
 }
 
-// MARK: - CategoryPill (legacy alias)
-
-struct CategoryPill: View {
-    let label: String
-    let isSelected: Bool
-    let action: () -> Void
-    var body: some View {
-        MiniFilterPill(label: label, isSelected: isSelected, action: action)
-    }
-}
