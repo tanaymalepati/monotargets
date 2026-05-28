@@ -11,6 +11,7 @@ struct AddTransactionView: View {
     @State private var digits                = ""
     @State private var type: Transaction.TransactionType = .inward
     @State private var selectedCategory:     Transaction.Category?       = nil
+    @State private var selectedCustomCategoryID: UUID?                  = nil
     @State private var note                  = ""
     @State private var payee                 = ""
     @State private var selectedPaymentMethod: Transaction.PaymentMethod? = nil
@@ -88,18 +89,45 @@ struct AddTransactionView: View {
                 .padding(.horizontal, Mono.S.md)
                 .padding(.bottom, Mono.S.sm)
 
-                // Category
+                // Category (built-in + custom)
                 let relevantCats: [Transaction.Category] = type == .inward
                     ? Transaction.Category.allCases.filter { $0.isIncome || $0 == .other }
                     : Transaction.Category.allCases.filter { !$0.isIncome }
 
+                let relevantCustomCats: [CustomCategory] = type == .inward
+                    ? store.customCategories.filter { $0.isIncome }
+                    : store.customCategories.filter { !$0.isIncome }
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(relevantCats) { cat in
-                            TransactionCategoryChip(cat: cat, isSelected: selectedCategory == cat) {
+                            TransactionCategoryChip(cat: cat, isSelected: selectedCategory == cat && selectedCustomCategoryID == nil) {
                                 withAnimation(.spring(duration: 0.2, bounce: 0.3)) {
-                                    selectedCategory = (selectedCategory == cat) ? nil : cat
-                                    if note.isEmpty { note = cat.label }
+                                    if selectedCategory == cat && selectedCustomCategoryID == nil {
+                                        selectedCategory = nil
+                                    } else {
+                                        selectedCategory = cat
+                                        selectedCustomCategoryID = nil
+                                        if note.isEmpty { note = cat.label }
+                                    }
+                                }
+                                Haptic.select()
+                            }
+                        }
+                        ForEach(relevantCustomCats) { custom in
+                            CustomCategoryChip(
+                                name: custom.name,
+                                icon: custom.icon,
+                                isSelected: selectedCustomCategoryID == custom.id
+                            ) {
+                                withAnimation(.spring(duration: 0.2, bounce: 0.3)) {
+                                    if selectedCustomCategoryID == custom.id {
+                                        selectedCustomCategoryID = nil
+                                    } else {
+                                        selectedCustomCategoryID = custom.id
+                                        selectedCategory = nil
+                                        if note.isEmpty { note = custom.name }
+                                    }
                                 }
                                 Haptic.select()
                             }
@@ -249,6 +277,7 @@ struct AddTransactionView: View {
         .onChange(of: type) { _, _ in
             withAnimation(.spring(duration: 0.2, bounce: 0.2)) {
                 selectedCategory = nil
+                selectedCustomCategoryID = nil
                 note = ""
             }
         }
@@ -263,7 +292,10 @@ struct AddTransactionView: View {
     private func commitTransaction() {
         guard isValid else { Haptic.error(); return }
 
-        let finalNote = note.isEmpty ? (selectedCategory?.label ?? "") : note
+        let customCatLabel = selectedCustomCategoryID.flatMap { id in
+            store.customCategories.first(where: { $0.id == id })?.name
+        }
+        let finalNote = note.isEmpty ? (customCatLabel ?? selectedCategory?.label ?? "") : note
 
         store.addTransaction(
             amount:          amount,
@@ -292,14 +324,15 @@ struct AddTransactionView: View {
             note   = ""
             payee  = ""
             tagsText = ""
-            selectedCategory     = nil
-            selectedPaymentMethod = nil
-            isRecurring          = false
-            recurringPeriod      = nil
-            showDetails          = false
-            showSuccess          = false
-            panelOffset          = 700
-            backdropOpacity      = 0
+            selectedCategory         = nil
+            selectedCustomCategoryID = nil
+            selectedPaymentMethod    = nil
+            isRecurring              = false
+            recurringPeriod          = nil
+            showDetails              = false
+            showSuccess              = false
+            panelOffset              = 700
+            backdropOpacity          = 0
         }
     }
 }
@@ -472,6 +505,37 @@ struct TransactionCategoryChip: View {
                 Capsule(style: .continuous)
                     .fill(isSelected ? Mono.C.text : Mono.C.surfaceTop)
                     .overlay(Capsule(style: .continuous).strokeBorder(isSelected ? .clear : Mono.C.border, lineWidth: 0.5))
+            )
+            .animation(.spring(duration: 0.2, bounce: 0.3), value: isSelected)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Custom Category Chip
+
+struct CustomCategoryChip: View {
+    let name: String
+    let icon: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .medium))
+                Text(name)
+                    .font(Mono.T.mono(12, .medium))
+            }
+            .foregroundColor(isSelected ? Mono.C.bg : Mono.C.accent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? Mono.C.accent : Mono.C.accent.opacity(0.10))
+                    .overlay(Capsule(style: .continuous)
+                        .strokeBorder(isSelected ? .clear : Mono.C.accent.opacity(0.35), lineWidth: 0.5))
             )
             .animation(.spring(duration: 0.2, bounce: 0.3), value: isSelected)
         }

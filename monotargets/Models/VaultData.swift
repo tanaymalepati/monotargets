@@ -15,6 +15,7 @@ struct VaultData: Codable {
     var budgets: [Budget]                    // per-category monthly limits
     var activeChallenges: [ActiveChallenge]  // currently joined challenges
     var dismissedWeeklyRecap: Date?          // date of last dismissed recap
+    var customCategories: [CustomCategory]   // user-defined transaction categories
 
     init(
         transactions: [Transaction] = [],
@@ -26,7 +27,8 @@ struct VaultData: Codable {
         longestStreak: Int = 0,
         budgets: [Budget] = [],
         activeChallenges: [ActiveChallenge] = [],
-        dismissedWeeklyRecap: Date? = nil
+        dismissedWeeklyRecap: Date? = nil,
+        customCategories: [CustomCategory] = []
     ) {
         self.transactions          = transactions
         self.savingsItems          = savingsItems
@@ -40,6 +42,7 @@ struct VaultData: Codable {
         self.budgets               = budgets
         self.activeChallenges      = activeChallenges
         self.dismissedWeeklyRecap  = dismissedWeeklyRecap
+        self.customCategories      = customCategories
     }
 
     // Backward-compatible decoding
@@ -55,8 +58,9 @@ struct VaultData: Codable {
         lastStreakDate       = try c.decodeIfPresent(Date.self,              forKey: .lastStreakDate)
         longestStreak        = try c.decodeIfPresent(Int.self,               forKey: .longestStreak)       ?? 0
         budgets              = try c.decodeIfPresent([Budget].self,          forKey: .budgets)             ?? []
-        activeChallenges     = try c.decodeIfPresent([ActiveChallenge].self, forKey: .activeChallenges)    ?? []
-        dismissedWeeklyRecap = try c.decodeIfPresent(Date.self,              forKey: .dismissedWeeklyRecap)
+        activeChallenges     = try c.decodeIfPresent([ActiveChallenge].self,  forKey: .activeChallenges)    ?? []
+        dismissedWeeklyRecap = try c.decodeIfPresent(Date.self,               forKey: .dismissedWeeklyRecap)
+        customCategories     = try c.decodeIfPresent([CustomCategory].self,   forKey: .customCategories)    ?? []
     }
 }
 

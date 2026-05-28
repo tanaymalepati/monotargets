@@ -18,6 +18,7 @@ struct CreateGoalView: View {
     @State private var photoData: Data?               = nil
     @State private var focusedField: Field? = .name
     @State private var nameScale: CGFloat   = 1.0
+    @State private var selectedCategory: GoalCategory? = nil
 
     enum Field { case name, description }
 
@@ -138,6 +139,27 @@ struct CreateGoalView: View {
                         }
                         .padding(.horizontal, Mono.S.md)
 
+                        // Category picker
+                        VStack(alignment: .leading, spacing: 8) {
+                            OverlineLabel(text: "Category (Optional)")
+                                .padding(.horizontal, Mono.S.md + 4)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(GoalCategory.allCases) { cat in
+                                        GoalCategoryChip(category: cat, isSelected: selectedCategory == cat) {
+                                            withAnimation(.spring(duration: 0.2, bounce: 0.3)) {
+                                                selectedCategory = (selectedCategory == cat) ? nil : cat
+                                            }
+                                            Haptic.select()
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, Mono.S.md)
+                                .padding(.vertical, 2)
+                            }
+                        }
+                        .padding(.horizontal, Mono.S.md)
+
                         // Target Amount
                         VStack(alignment: .leading, spacing: Mono.S.md) {
                             OverlineLabel(text: "Target Amount")
@@ -235,13 +257,14 @@ struct CreateGoalView: View {
         }
         .onAppear {
             if let item = editingItem {
-                name         = item.name
-                description  = item.itemDescription
-                icon         = item.icon
-                targetDigits = String(Int(item.targetAmount))
-                hasTargetDate = item.targetDate != nil
-                targetDate   = item.targetDate ?? Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
-                photoData    = item.photoData
+                name             = item.name
+                description      = item.itemDescription
+                icon             = item.icon
+                targetDigits     = String(Int(item.targetAmount))
+                hasTargetDate    = item.targetDate != nil
+                targetDate       = item.targetDate ?? Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
+                photoData        = item.photoData
+                selectedCategory = item.goalCategory
             }
         }
     }
@@ -259,6 +282,7 @@ struct CreateGoalView: View {
             existing.targetAmount    = targetAmount
             existing.targetDate      = hasTargetDate ? targetDate : nil
             existing.photoData       = photoData
+            existing.goalCategory    = selectedCategory
             store.updateSavingsItem(existing)
         } else {
             let item = SavingsItem(
@@ -267,11 +291,44 @@ struct CreateGoalView: View {
                 icon: icon,
                 targetAmount: targetAmount,
                 targetDate: hasTargetDate ? targetDate : nil,
-                photoData: photoData
+                photoData: photoData,
+                goalCategory: selectedCategory
             )
             store.createSavingsItem(item)
         }
         dismiss()
+    }
+}
+
+// MARK: - Goal Category Chip
+
+struct GoalCategoryChip: View {
+    let category: GoalCategory
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: category.icon)
+                    .font(.system(size: 11, weight: .medium))
+                Text(category.label)
+                    .font(Mono.T.mono(11, .semibold))
+            }
+            .foregroundColor(isSelected ? Mono.C.bg : category.color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? category.color : category.color.opacity(0.12))
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(isSelected ? .clear : category.color.opacity(0.40), lineWidth: 0.5)
+                    )
+            )
+            .animation(.spring(duration: 0.2, bounce: 0.3), value: isSelected)
+        }
+        .buttonStyle(.plain)
     }
 }
 

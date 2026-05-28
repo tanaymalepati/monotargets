@@ -16,6 +16,7 @@ final class AppStore {
     var budgets: [Budget]                   = []
     var activeChallenges: [ActiveChallenge] = []
     var dismissedWeeklyRecap: Date?         = nil
+    var customCategories: [CustomCategory]  = []
 
     /// Achievements newly unlocked in this session — drive the pop-up toast
     var newlyUnlockedAchievements: [Achievement] = []
@@ -404,6 +405,7 @@ final class AppStore {
         budgets              = decoded.budgets
         activeChallenges     = decoded.activeChallenges
         dismissedWeeklyRecap = decoded.dismissedWeeklyRecap
+        customCategories     = decoded.customCategories
     }
 
     func save() {
@@ -417,7 +419,8 @@ final class AppStore {
             longestStreak:        longestStreak,
             budgets:              budgets,
             activeChallenges:     activeChallenges,
-            dismissedWeeklyRecap: dismissedWeeklyRecap
+            dismissedWeeklyRecap: dismissedWeeklyRecap,
+            customCategories:     customCategories
         )
         if let data = try? JSONEncoder().encode(payload) {
             try? data.write(to: dataURL, options: .atomic)
@@ -516,6 +519,25 @@ final class AppStore {
         save()
     }
 
+    // MARK: - Custom Categories
+
+    func addCustomCategory(_ category: CustomCategory) {
+        customCategories.append(category)
+        save()
+    }
+
+    func updateCustomCategory(_ category: CustomCategory) {
+        if let idx = customCategories.firstIndex(where: { $0.id == category.id }) {
+            customCategories[idx] = category
+        }
+        save()
+    }
+
+    func deleteCustomCategory(id: UUID) {
+        customCategories.removeAll { $0.id == id }
+        save()
+    }
+
     // MARK: - Backup folder
 
     func setBackupFolder(bookmark: Data) {
@@ -536,6 +558,7 @@ final class AppStore {
         budgets              = []
         activeChallenges     = []
         dismissedWeeklyRecap = nil
+        customCategories     = []
         UserDefaults.standard.removeObject(forKey: "onboarding_done")
         UserDefaults.standard.removeObject(forKey: "user_name")
         save()

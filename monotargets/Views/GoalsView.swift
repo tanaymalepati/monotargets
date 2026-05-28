@@ -2,6 +2,12 @@ import SwiftUI
 
 // MARK: - Goals View
 
+enum GoalLayoutMode: String {
+    case list  = "list"
+    case grid  = "grid"
+    case swipe = "swipe"
+}
+
 struct GoalsView: View {
     @Environment(AppStore.self) private var store
     @State private var showCreateGoal  = false
@@ -10,8 +16,12 @@ struct GoalsView: View {
     @State private var activeTab:      GoalTab = .active
     @State private var sortMode:       GoalSort = .progress
     @State private var filterMode:     GoalFilter = .all
+    @State private var categoryFilter: GoalCategory? = nil
     @State private var showSortMenu    = false
+    @AppStorage("goals_layout_mode") private var layoutModeRaw = "list"
     @Namespace private var zoomNamespace
+
+    private var layoutMode: GoalLayoutMode { GoalLayoutMode(rawValue: layoutModeRaw) ?? .list }
 
     enum GoalTab   { case active, completed }
     enum GoalSort  { case progress, targetDate, remaining, name
@@ -30,6 +40,10 @@ struct GoalsView: View {
         case .overdue: items = items.filter { ($0.daysUntilTarget ?? 1) < 0 && !$0.isFullyFunded }
         case .funded:  items = items.filter { $0.isFullyFunded }
         }
+        // Apply category filter
+        if let cat = categoryFilter {
+            items = items.filter { $0.goalCategory == cat }
+        }
         switch sortMode {
         case .progress:   items.sort { $0.progress > $1.progress }
         case .targetDate: items.sort {
@@ -41,6 +55,12 @@ struct GoalsView: View {
         case .name:       items.sort { $0.name < $1.name }
         }
         return items
+    }
+
+    /// Which categories are actually used in active goals (so we only show relevant pills)
+    private var usedCategories: [GoalCategory] {
+        let used = Set(store.savingsItems.filter { !$0.isCompleted }.compactMap { $0.goalCategory })
+        return GoalCategory.allCases.filter { used.contains($0) }
     }
 
     private var completedItems: [SavingsItem] {
@@ -73,20 +93,52 @@ struct GoalsView: View {
 
                 // ── Tab + Filter bar ────────────────────────────────
                 VStack(spacing: 8) {
-                    // Row 1: Tab switcher — full width
-                    HStack(spacing: 4) {
-                        GoalTabPill(label: "Active", count: activeItems.count, isSelected: activeTab == .active) {
-                            withAnimation(.spring(duration: 0.25, bounce: 0.3)) { activeTab = .active }
-                            Haptic.select()
+                    // Row 1: Tab switcher + Layout toggle
+                    HStack(spacing: Mono.S.sm) {
+                        HStack(spacing: 4) {
+                            GoalTabPill(label: "Active", count: activeItems.count, isSelected: activeTab == .active) {
+                                withAnimation(.spring(duration: 0.25, bounce: 0.3)) { activeTab = .active }
+                                Haptic.select()
+                            }
+                            GoalTabPill(label: "Done", count: completedItems.count, isSelected: activeTab == .completed) {
+                                withAnimation(.spring(duration: 0.25, bounce: 0.3)) { activeTab = .completed }
+                                Haptic.select()
+                            }
                         }
-                        GoalTabPill(label: "Done", count: completedItems.count, isSelected: activeTab == .completed) {
-                            withAnimation(.spring(duration: 0.25, bounce: 0.3)) { activeTab = .completed }
-                            Haptic.select()
+                        .padding(3)
+                        .frame(maxWidth: .infinity)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Mono.C.surfaceTop))
+
+                        // Layout toggle buttons
+                        if activeTab == .active {
+                            HStack(spacing: 2) {
+                                ForEach([("list.bullet", "list"), ("square.grid.2x2", "grid"), ("rectangle.stack", "swipe")], id: \.1) { sym, mode in
+                                    Button {
+                                        withAnimation(.spring(duration: 0.22, bounce: 0.3)) { layoutModeRaw = mode }
+                                        Haptic.select()
+                                    } label: {
+                                        Image(systemName: sym)
+                                            .font(.system(size: 12, weight: layoutModeRaw == mode ? .bold : .regular))
+                                            .foregroundColor(layoutModeRaw == mode ? Mono.C.text : Mono.C.textDim)
+                                            .frame(width: 30, height: 30)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                    .fill(layoutModeRaw == mode ? Mono.C.surfaceTop : .clear)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    .fill(Mono.C.surface)
+                                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                        .strokeBorder(Mono.C.border, lineWidth: 0.5))
+                            )
+                            .transition(.opacity.combined(with: .scale(scale: 0.9)))
                         }
                     }
-                    .padding(3)
-                    .frame(maxWidth: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Mono.C.surfaceTop))
 
                     // Row 2: Filters + Sort (active tab only)
                     if activeTab == .active {
@@ -133,6 +185,48 @@ struct GoalsView: View {
                         }
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
+
+                    // Row 3: Category filter (only when active tab and categories exist)
+                    if activeTab == .active && !usedCategories.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 5) {
+                                // "All" pill
+                                ToolbarFilterPill(label: "All", isSelected: categoryFilter == nil) {
+                                    withAnimation(.spring(duration: 0.2)) { categoryFilter = nil }
+                                    Haptic.select()
+                                }
+                                ForEach(usedCategories) { cat in
+                                    Button {
+                                        withAnimation(.spring(duration: 0.2)) {
+                                            categoryFilter = (categoryFilter == cat) ? nil : cat
+                                        }
+                                        Haptic.select()
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: cat.icon)
+                                                .font(.system(size: 9, weight: .semibold))
+                                            Text(cat.label)
+                                                .font(Mono.T.mono(11, .semibold))
+                                        }
+                                        .foregroundColor(categoryFilter == cat ? cat.color : Mono.C.textSec)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 7)
+                                        .background(
+                                            Capsule(style: .continuous)
+                                                .fill(categoryFilter == cat ? cat.color.opacity(0.15) : Mono.C.surfaceUp)
+                                                .overlay(Capsule(style: .continuous)
+                                                    .strokeBorder(
+                                                        categoryFilter == cat ? cat.color.opacity(0.5) : Mono.C.border,
+                                                        lineWidth: 0.5))
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .animation(.spring(duration: 0.18), value: categoryFilter == cat)
+                                }
+                            }
+                        }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
                 .padding(.horizontal, Mono.S.md)
                 .padding(.bottom, Mono.S.sm)
@@ -146,18 +240,27 @@ struct GoalsView: View {
                             .padding(.horizontal, Mono.S.md)
                         Spacer()
                     } else {
-                        ScrollView(showsIndicators: false) {
-                            VStack(spacing: 10) {
-                                ForEach(Array(activeItems.enumerated()), id: \.element.id) { idx, item in
-                                    GoalCard(item: item, namespace: zoomNamespace) { selectedItem = item }
-                                        .padding(.horizontal, Mono.S.md)
-                                        .opacity(appeared ? 1 : 0)
-                                        .offset(y: appeared ? 0 : 20 + CGFloat(idx * 6))
-                                        .animation(.spring(duration: 0.45, bounce: 0.25).delay(0.05 + Double(idx) * 0.05), value: appeared)
-                                }
-                                Spacer(minLength: 110)
-                            }
-                            .padding(.top, 4)
+                        switch layoutMode {
+                        case .list:
+                            GoalListLayout(
+                                items: activeItems,
+                                namespace: zoomNamespace,
+                                appeared: appeared,
+                                onTap: { selectedItem = $0 }
+                            )
+                        case .grid:
+                            GoalGridLayout(
+                                items: activeItems,
+                                appeared: appeared,
+                                onTap: { selectedItem = $0 }
+                            )
+                        case .swipe:
+                            GoalSwipeLayout(
+                                items: activeItems,
+                                namespace: zoomNamespace,
+                                appeared: appeared,
+                                onTap: { selectedItem = $0 }
+                            )
                         }
                     }
                 } else {
@@ -581,6 +684,172 @@ struct GoalCard: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous))
             .matchedTransitionSource(id: item.id, in: namespace)
+        }
+        .buttonStyle(CardPressStyle())
+    }
+}
+
+// MARK: - Goal Layout Containers
+
+struct GoalListLayout: View {
+    let items: [SavingsItem]
+    let namespace: Namespace.ID
+    let appeared: Bool
+    let onTap: (SavingsItem) -> Void
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 10) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                    GoalCard(item: item, namespace: namespace) { onTap(item) }
+                        .padding(.horizontal, Mono.S.md)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 20 + CGFloat(idx * 6))
+                        .animation(.spring(duration: 0.45, bounce: 0.25).delay(0.05 + Double(idx) * 0.05), value: appeared)
+                }
+                Spacer(minLength: 110)
+            }
+            .padding(.top, 4)
+        }
+    }
+}
+
+struct GoalGridLayout: View {
+    let items: [SavingsItem]
+    let appeared: Bool
+    let onTap: (SavingsItem) -> Void
+
+    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                    GoalGridCard(item: item) { onTap(item) }
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 20 + CGFloat(idx * 4))
+                        .animation(.spring(duration: 0.45, bounce: 0.25).delay(0.05 + Double(idx) * 0.04), value: appeared)
+                }
+            }
+            .padding(.horizontal, Mono.S.md)
+            .padding(.top, 4)
+            Spacer(minLength: 110)
+        }
+    }
+}
+
+struct GoalSwipeLayout: View {
+    let items: [SavingsItem]
+    let namespace: Namespace.ID
+    let appeared: Bool
+    let onTap: (SavingsItem) -> Void
+
+    @State private var currentPage = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TabView(selection: $currentPage) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                    GoalCard(item: item, namespace: namespace) { onTap(item) }
+                        .padding(.horizontal, Mono.S.lg)
+                        .padding(.vertical, Mono.S.sm)
+                        .tag(idx)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(maxHeight: .infinity)
+            .opacity(appeared ? 1 : 0)
+
+            // Dot indicator
+            HStack(spacing: 6) {
+                ForEach(0..<items.count, id: \.self) { i in
+                    Circle()
+                        .fill(i == currentPage ? Mono.C.text : Mono.C.textDim)
+                        .frame(width: i == currentPage ? 7 : 5, height: i == currentPage ? 7 : 5)
+                        .animation(.spring(duration: 0.22, bounce: 0.4), value: currentPage)
+                }
+            }
+            .padding(.bottom, 110)
+        }
+    }
+}
+
+// MARK: - Goal Grid Card
+
+struct GoalGridCard: View {
+    let item: SavingsItem
+    let onTap: () -> Void
+
+    @AppStorage("smart_eta_enabled") private var etaEnabled = true
+
+    private var accentColor: Color { item.isFullyFunded ? Mono.C.text : Mono.C.accent }
+
+    var body: some View {
+        Button(action: { onTap(); Haptic.light() }) {
+            VStack(alignment: .leading, spacing: 10) {
+                // Icon + Category badge row
+                HStack(alignment: .top) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceTop)
+                            .frame(width: 40, height: 40)
+                        Image(systemName: item.icon)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
+                    }
+                    Spacer()
+                    // Percentage badge
+                    HStack(alignment: .firstTextBaseline, spacing: 1) {
+                        Text("\(Int(item.progress * 100))")
+                            .font(Mono.T.mono(17, .bold))
+                            .foregroundColor(item.progress > 0 ? accentColor : Mono.C.textDim)
+                            .contentTransition(.numericText(countsDown: false))
+                        Text("%")
+                            .font(Mono.T.mono(9, .semibold))
+                            .foregroundColor(Mono.C.textTert)
+                            .baselineOffset(2)
+                    }
+                }
+
+                // Name
+                Text(item.name)
+                    .font(Mono.T.mono(13, .semibold))
+                    .foregroundColor(Mono.C.text)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+
+                // Thin progress bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(Mono.C.surfaceTop)
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(LinearGradient(colors: [accentColor.opacity(0.6), accentColor],
+                                                 startPoint: .leading, endPoint: .trailing))
+                            .frame(width: max(geo.size.width * item.progress, 0))
+                    }
+                }
+                .frame(height: 3)
+
+                // Target amount
+                Text(item.targetAmount.indianFormattedCompact)
+                    .font(Mono.T.mono(10, .regular))
+                    .foregroundColor(Mono.C.textDim)
+            }
+            .padding(Mono.S.md)
+            .frame(minHeight: 130)
+            .background(
+                RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous)
+                    .fill(Mono.G.cardSubtle)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous)
+                            .strokeBorder(Mono.C.border, lineWidth: 0.5)
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 10, x: 0, y: 4)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous))
         }
         .buttonStyle(CardPressStyle())
     }

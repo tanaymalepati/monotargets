@@ -16,6 +16,7 @@ struct SavingsItem: Identifiable, Codable, Hashable {
     var monthlyReminderDay: Int?  // 1–28
     var boostTarget: Double?      // committed amount for active boost
     var boostDeadline: Date?      // 7-day deadline for boost
+    var goalCategory: GoalCategory? // optional goal category
 
     init(
         id: UUID = UUID(),
@@ -32,7 +33,8 @@ struct SavingsItem: Identifiable, Codable, Hashable {
         photoData: Data? = nil,
         monthlyReminderDay: Int? = nil,
         boostTarget: Double? = nil,
-        boostDeadline: Date? = nil
+        boostDeadline: Date? = nil,
+        goalCategory: GoalCategory? = nil
     ) {
         self.id                 = id
         self.createdAt          = createdAt
@@ -49,6 +51,7 @@ struct SavingsItem: Identifiable, Codable, Hashable {
         self.monthlyReminderDay = monthlyReminderDay
         self.boostTarget        = boostTarget
         self.boostDeadline      = boostDeadline
+        self.goalCategory       = goalCategory
     }
 
     init(from decoder: Decoder) throws {
@@ -66,8 +69,9 @@ struct SavingsItem: Identifiable, Codable, Hashable {
         isFavorite         = try c.decodeIfPresent(Bool.self,  forKey: .isFavorite)         ?? false
         photoData          = try c.decodeIfPresent(Data.self,  forKey: .photoData)
         monthlyReminderDay = try c.decodeIfPresent(Int.self,   forKey: .monthlyReminderDay)
-        boostTarget        = try c.decodeIfPresent(Double.self, forKey: .boostTarget)
-        boostDeadline      = try c.decodeIfPresent(Date.self,  forKey: .boostDeadline)
+        boostTarget        = try c.decodeIfPresent(Double.self,        forKey: .boostTarget)
+        boostDeadline      = try c.decodeIfPresent(Date.self,          forKey: .boostDeadline)
+        goalCategory       = try c.decodeIfPresent(GoalCategory.self,  forKey: .goalCategory)
     }
 
     // MARK: - Computed

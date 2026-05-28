@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var showCurrencyPicker  = false
     @State private var showRerunConfirm    = false
     @State private var showBudgets         = false
+    @State private var showCustomCategories = false
 
     enum BackupStatus: Equatable {
         case idle, success(String), error(String)
@@ -126,6 +127,18 @@ struct SettingsView: View {
                             withAnimation { etaEnabled.toggle() }
                             Haptic.select()
                         }
+
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+
+                        // Custom Categories row
+                        SettingsRow(icon: "tag.fill", label: "Custom Categories") {
+                            Text("\(store.customCategories.count) custom")
+                                .font(Mono.T.mono(13, .regular))
+                                .foregroundColor(Mono.C.textSec)
+                        } action: {
+                            showCustomCategories = true
+                            Haptic.light()
+                        }
                     }
                     .padding(.horizontal, Mono.S.md)
                     .opacity(appeared ? 1 : 0)
@@ -146,8 +159,8 @@ struct SettingsView: View {
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 16)
 
-                    // Backup section
-                    SettingsSection(title: "Backup") {
+                    // Backup & Restore section
+                    SettingsSection(title: "Backup & Restore") {
                         SettingsRow(icon: "folder.fill", label: "Backup Folder") {
                             VStack(alignment: .trailing, spacing: 2) {
                                 if let name = backupFolderName {
@@ -369,6 +382,13 @@ struct SettingsView: View {
                 appeared = true
             }
             refreshBackupInfo()
+        }
+        .sheet(isPresented: $showCustomCategories) {
+            CustomCategoriesView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground(Mono.C.bg)
+                .presentationCornerRadius(24)
         }
         .sheet(isPresented: $showBudgets) {
             BudgetManagerView()
