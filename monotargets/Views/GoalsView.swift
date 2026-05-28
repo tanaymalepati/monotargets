@@ -222,6 +222,9 @@ struct GoalCard: View {
     let namespace: Namespace.ID
     let onTap: () -> Void
 
+    @Environment(AppStore.self) private var store
+    @AppStorage("smart_eta_enabled") private var etaEnabled = true
+
     var body: some View {
         Button(action: {
             onTap()
@@ -309,9 +312,19 @@ struct GoalCard: View {
                             .font(Mono.T.mono(11, .medium))
                             .foregroundColor(days < 0 ? Mono.C.negative : (days <= 30 ? Mono.C.textSec : Mono.C.textDim))
                     } else {
-                        Text("No target date")
-                            .font(Mono.T.mono(11, .regular))
+                        if etaEnabled, !item.isFullyFunded, let eta = store.goalETA(for: item.id) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 10, weight: .medium))
+                                Text(eta)
+                                    .font(Mono.T.mono(11, .medium))
+                            }
                             .foregroundColor(Mono.C.textDim)
+                        } else {
+                            Text("No target date")
+                                .font(Mono.T.mono(11, .regular))
+                                .foregroundColor(Mono.C.textDim)
+                        }
 
                         Spacer()
 

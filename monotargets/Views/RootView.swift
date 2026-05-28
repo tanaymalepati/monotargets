@@ -106,8 +106,8 @@ struct RootView: View {
                 }
                 .onEnded { value in
                     if value.startLocation.y < 80 && value.translation.height > 60 {
-                        withAnimation(.spring(duration: 0.45, bounce: 0.3)) {
-                            showAddTransaction = true
+                        showAddTransaction = true
+                        withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
                             pullOffset = 0
                         }
                         Haptic.medium()

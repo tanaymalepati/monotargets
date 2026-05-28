@@ -3,12 +3,20 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
-    @State private var showFolderPicker = false
-    @State private var showRestorePicker = false
+    @AppStorage("user_name")           private var userName       = ""
+    @AppStorage("currency_code")       private var currencyCode   = "INR"
+    @AppStorage("onboarding_done")     private var onboardingDone = true
+    @AppStorage("smart_eta_enabled")   private var etaEnabled     = true
+
+    @State private var showFolderPicker    = false
+    @State private var showRestorePicker   = false
     @State private var backupStatus: BackupStatus = .idle
-    @State private var appeared = false
+    @State private var appeared            = false
     @State private var liveBackupInfo: (count: Int, oldest: Date?, newest: Date?) = (0, nil, nil)
-    @State private var showClearConfirm = false
+    @State private var showClearConfirm    = false
+    @State private var showCurrencyPicker  = false
+    @State private var showRerunConfirm    = false
+    @State private var showBudgets         = false
 
     enum BackupStatus: Equatable {
         case idle, success(String), error(String)
@@ -55,6 +63,88 @@ struct SettingsView: View {
                         .padding(.top, Mono.S.sm)
                         .opacity(appeared ? 1 : 0)
                         .scaleEffect(appeared ? 1 : 0.92)
+
+                    // Preferences section
+                    SettingsSection(title: "Preferences") {
+                        // Name row
+                        SettingsRow(icon: "person.fill", label: "Your Name") {
+                            Text(userName.isEmpty ? "Not set" : userName)
+                                .font(Mono.T.mono(13, .regular))
+                                .foregroundColor(userName.isEmpty ? Mono.C.textDim : Mono.C.textSec)
+                        } action: {
+                            showCurrencyPicker = false
+                            // Inline edit via alert-style — handled in sheet below
+                            showRerunConfirm = false
+                        }
+
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+
+                        // Currency row
+                        SettingsRow(icon: "coloncurrencysign.circle.fill", label: "Currency") {
+                            if let cur = CurrencyInfo.all.first(where: { $0.code == currencyCode }) {
+                                HStack(spacing: 4) {
+                                    Text(cur.flag)
+                                    Text("\(cur.code) \(cur.symbol)")
+                                        .font(Mono.T.mono(13, .medium))
+                                        .foregroundColor(Mono.C.textSec)
+                                }
+                            }
+                        } action: {
+                            showCurrencyPicker = true
+                            Haptic.light()
+                        }
+
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+
+                        // Smart ETA toggle
+                        HStack(spacing: Mono.S.md) {
+                            Image(systemName: "clock.arrow.2.circlepath")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(Mono.C.textSec)
+                                .frame(width: 22)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Smart Goal ETA")
+                                    .font(Mono.T.mono(15, .medium))
+                                    .foregroundColor(Mono.C.text)
+                                Text("Estimated time to fund each goal")
+                                    .font(Mono.T.mono(11, .regular))
+                                    .foregroundColor(Mono.C.textDim)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $etaEnabled)
+                                .tint(Mono.C.text)
+                                .labelsHidden()
+                                .onChange(of: etaEnabled) { _, _ in Haptic.select() }
+                        }
+                        .frame(minHeight: 52)
+                        .padding(.horizontal, Mono.S.md)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation { etaEnabled.toggle() }
+                            Haptic.select()
+                        }
+                    }
+                    .padding(.horizontal, Mono.S.md)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 16)
+
+                    // Budget section
+                    SettingsSection(title: "Budgets") {
+                        SettingsRow(icon: "chart.bar.fill", label: "Monthly Budgets") {
+                            Text("\(store.budgets.count) set")
+                                .font(Mono.T.mono(13, .regular))
+                                .foregroundColor(Mono.C.textSec)
+                        } action: {
+                            showBudgets = true
+                            Haptic.light()
+                        }
+                    }
+                    .padding(.horizontal, Mono.S.md)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 16)
 
                     // Backup section
                     SettingsSection(title: "Backup") {
@@ -197,6 +287,18 @@ struct SettingsView: View {
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 20)
 
+                    // Account section
+                    SettingsSection(title: "Account") {
+                        SettingsRow(icon: "arrow.counterclockwise.circle.fill", label: "Re-run Setup") {
+                            EmptyView()
+                        } action: {
+                            showRerunConfirm = true
+                            Haptic.medium()
+                        }
+                    }
+                    .padding(.horizontal, Mono.S.md)
+                    .opacity(appeared ? 1 : 0)
+
                     // Danger zone
                     SettingsSection(title: "Danger Zone") {
                         DangerButton(icon: "trash.fill", label: "Clear All Data") {
@@ -231,6 +333,13 @@ struct SettingsView: View {
             }
             refreshBackupInfo()
         }
+        .sheet(isPresented: $showBudgets) {
+            BudgetManagerView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground(Mono.C.bg)
+                .presentationCornerRadius(24)
+        }
         .sheet(isPresented: $showFolderPicker) {
             DocumentPicker(mode: .folder) { url in
                 showFolderPicker = false
@@ -244,10 +353,24 @@ struct SettingsView: View {
             ClearDataConfirmSheet()
                 .presentationDetents([.fraction(0.62)])
                 .presentationDragIndicator(.hidden)
-                .presentationBackground {
-                    Color(white: 0.035)
-                }
+                .presentationBackground { Color(white: 0.035) }
                 .presentationCornerRadius(20)
+        }
+        .sheet(isPresented: $showCurrencyPicker) {
+            CurrencyPickerSheet(selected: $currencyCode)
+                .presentationDetents([.fraction(0.72)])
+                .presentationDragIndicator(.hidden)
+                .presentationBackground { Color(white: 0.035) }
+                .presentationCornerRadius(20)
+        }
+        .confirmationDialog("Re-run Setup?", isPresented: $showRerunConfirm, titleVisibility: .visible) {
+            Button("Re-run Setup", role: .destructive) {
+                onboardingDone = false
+                Haptic.success()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will restart the setup flow. Your data won't be deleted.")
         }
         .sheet(isPresented: $showRestorePicker) {
             DocumentPicker(mode: .jsonFile) { url in
@@ -450,6 +573,80 @@ struct AppearanceToggleRow: View {
                 isMonochrome.toggle()
             }
             Haptic.select()
+        }
+    }
+}
+
+// MARK: - Currency Picker Sheet
+
+struct CurrencyPickerSheet: View {
+    @Binding var selected: String
+    @Environment(\.dismiss) private var dismiss
+
+    private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Mono.C.borderBright)
+                .frame(width: 40, height: 5)
+                .padding(.top, 14)
+                .padding(.bottom, Mono.S.md)
+
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .font(Mono.T.mono(14, .medium))
+                    .foregroundColor(Mono.C.textSec)
+                Spacer()
+                Text("Currency")
+                    .font(Mono.T.mono(15, .semibold))
+                    .foregroundColor(Mono.C.text)
+                Spacer()
+                Text("Cancel").font(Mono.T.mono(14, .medium)).foregroundColor(.clear)
+            }
+            .padding(.horizontal, Mono.S.lg)
+            .padding(.bottom, Mono.S.md)
+
+            MonoDivider()
+                .padding(.horizontal, Mono.S.md)
+                .padding(.bottom, Mono.S.lg)
+
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(CurrencyInfo.all) { cur in
+                    Button {
+                        withAnimation(.spring(duration: 0.25, bounce: 0.3)) {
+                            selected = cur.code
+                        }
+                        Haptic.select()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { dismiss() }
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text(cur.flag).font(.system(size: 26))
+                            Text(cur.symbol)
+                                .font(Mono.T.mono(14, .bold))
+                                .foregroundColor(selected == cur.code ? Mono.C.bg : Mono.C.text)
+                            Text(cur.code)
+                                .font(Mono.T.mono(9, .semibold))
+                                .foregroundColor(selected == cur.code ? Mono.C.bg.opacity(0.7) : Mono.C.textTert)
+                                .tracking(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                                .fill(selected == cur.code ? Mono.C.text : Mono.C.surfaceUp)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
+                                        .strokeBorder(selected == cur.code ? .clear : Mono.C.border, lineWidth: 0.5)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, Mono.S.md)
+
+            Spacer(minLength: Mono.S.lg)
         }
     }
 }

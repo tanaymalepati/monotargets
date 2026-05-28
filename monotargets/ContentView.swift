@@ -1,10 +1,18 @@
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage("onboarding_done") private var onboardingDone = false
+
     var body: some View {
-        RootView()
-            .preferredColorScheme(.dark)
-            .tint(Mono.C.text)
+        Group {
+            if onboardingDone {
+                RootView()
+            } else {
+                OnboardingView()
+            }
+        }
+        .preferredColorScheme(.dark)
+        .tint(Mono.C.text)
     }
 }
 

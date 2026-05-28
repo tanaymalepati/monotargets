@@ -69,10 +69,10 @@ struct EditTransactionView: View {
                             VStack(spacing: 6) {
                                 OverlineLabel(text: transaction.type.label)
                                 HStack(spacing: 4) {
-                                    Text(transaction.type.isDebit ? "-" : "+")
+                                    Text(transaction.type.isRedAction ? "-" : "+")
                                         .font(Mono.T.mono(28, .semibold))
                                         .foregroundColor(Mono.C.textTert)
-                                    Text(transaction.amount.indianFormatted)
+                                    Text(transaction.amount.currencyFormatted)
                                         .font(Mono.T.mono(34, .bold))
                                         .foregroundColor(Mono.C.text)
                                 }

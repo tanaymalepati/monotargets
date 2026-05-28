@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct CreateGoalView: View {
     @Environment(AppStore.self) private var store
@@ -13,9 +14,10 @@ struct CreateGoalView: View {
     @State private var hasTargetDate = false
     @State private var targetDate = Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
 
+    @State private var selectedPhoto: PhotosPickerItem? = nil
+    @State private var photoData: Data?               = nil
     @State private var focusedField: Field? = .name
-    @State private var nameScale: CGFloat = 1.0
-    @FocusState private var isFocused: Bool
+    @State private var nameScale: CGFloat   = 1.0
 
     enum Field { case name, description }
 
@@ -33,13 +35,78 @@ struct CreateGoalView: View {
 
                         // Icon + Name header
                         VStack(spacing: Mono.S.lg) {
-                            IconSelectButton(icon: $icon)
+                            // Icon + optional photo side by side
+                            HStack(spacing: Mono.S.lg) {
+                                Spacer()
+                                IconSelectButton(icon: $icon)
+
+                                // Photo picker / clear button
+                                if let data = photoData, let uiImg = UIImage(data: data) {
+                                    // Show photo with X to clear
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(uiImage: uiImg)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 56, height: 56)
+                                            .clipShape(Circle())
+                                            .overlay(
+                                                Circle().strokeBorder(Mono.C.borderBright.opacity(0.5), lineWidth: 0.5)
+                                            )
+                                        Button {
+                                            photoData = nil
+                                            selectedPhoto = nil
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 15))
+                                                .foregroundColor(Mono.C.bg)
+                                                .background(Circle().fill(Mono.C.text).padding(2))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .offset(x: 4, y: -4)
+                                    }
+                                } else {
+                                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Mono.C.surfaceTop)
+                                                .frame(width: 56, height: 56)
+                                                .overlay(
+                                                    Circle().strokeBorder(Mono.C.border, lineWidth: 0.5)
+                                                )
+                                            VStack(spacing: 2) {
+                                                Image(systemName: "camera.fill")
+                                                    .font(.system(size: 14, weight: .medium))
+                                                    .foregroundColor(Mono.C.textDim)
+                                                Text("Photo")
+                                                    .font(Mono.T.mono(8, .medium))
+                                                    .foregroundColor(Mono.C.textDim)
+                                                    .tracking(1)
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                Spacer()
+                            }
+                            .onChange(of: selectedPhoto) { _, newItem in
+                                guard photoData == nil || newItem != nil else { return }
+                                Task {
+                                    if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                        if let uiImg = UIImage(data: data) {
+                                            let side = CGFloat(200)
+                                            let thumb = uiImg.preparingThumbnail(of: CGSize(width: side, height: side))
+                                            await MainActor.run {
+                                                photoData = thumb?.jpegData(compressionQuality: 0.8) ?? data
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             // Name field
                             VStack(alignment: .leading, spacing: 6) {
                                 OverlineLabel(text: "Goal Name")
                                 TextField("e.g. MacBook Pro, Europe Trip…", text: $name)
-                                    .focused($isFocused)
                                     .font(Mono.T.mono(17, .semibold))
                                     .foregroundColor(Mono.C.text)
                                     .multilineTextAlignment(.center)
@@ -65,7 +132,6 @@ struct CreateGoalView: View {
                         // Description
                         FormField(label: "Description (Optional)") {
                             TextField("What are you saving for?", text: $description, axis: .vertical)
-                                .focused($isFocused)
                                 .font(Mono.T.body)
                                 .foregroundColor(Mono.C.text)
                                 .lineLimit(3)
@@ -96,7 +162,7 @@ struct CreateGoalView: View {
                                 .padding(.horizontal, Mono.S.lg)
                             }
 
-                            MonoNumpad(digits: $targetDigits, showConfirmKey: false)
+                            MonoNumpad(digits: $targetDigits)
                                 .padding(.horizontal, Mono.S.sm)
                         }
                         .padding(.horizontal, Mono.S.md)
@@ -156,26 +222,6 @@ struct CreateGoalView: View {
                     .padding(.top, Mono.S.md)
                 }
             }
-            .overlay(alignment: .bottom) {
-                if isFocused {
-                    HStack {
-                        Spacer()
-                        Button(action: { isFocused = false }) {
-                            Text("Done")
-                                .font(Mono.T.mono(15, .semibold))
-                                .foregroundColor(Mono.C.bg)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 10)
-                                .background(Capsule().fill(Mono.C.text))
-                                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
-                        }
-                    }
-                    .padding(.horizontal, Mono.S.md)
-                    .padding(.bottom, Mono.S.md)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.spring(duration: 0.3, bounce: 0.2), value: isFocused)
             .navigationTitle(isEditing ? "Edit Goal" : "New Goal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -195,6 +241,7 @@ struct CreateGoalView: View {
                 targetDigits = String(Int(item.targetAmount))
                 hasTargetDate = item.targetDate != nil
                 targetDate   = item.targetDate ?? Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
+                photoData    = item.photoData
             }
         }
     }
@@ -211,6 +258,7 @@ struct CreateGoalView: View {
             existing.icon            = icon
             existing.targetAmount    = targetAmount
             existing.targetDate      = hasTargetDate ? targetDate : nil
+            existing.photoData       = photoData
             store.updateSavingsItem(existing)
         } else {
             let item = SavingsItem(
@@ -218,7 +266,8 @@ struct CreateGoalView: View {
                 itemDescription: description,
                 icon: icon,
                 targetAmount: targetAmount,
-                targetDate: hasTargetDate ? targetDate : nil
+                targetDate: hasTargetDate ? targetDate : nil,
+                photoData: photoData
             )
             store.createSavingsItem(item)
         }
