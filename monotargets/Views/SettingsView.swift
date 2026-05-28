@@ -214,19 +214,56 @@ struct SettingsView: View {
 
                         MonoDivider().padding(.horizontal, Mono.S.md)
 
-                        SettingsRow(icon: "arrow.clockwise.circle.fill", label: "Backup Now") {
-                            if case .success(let msg) = backupStatus {
-                                Text(msg)
-                                    .font(Mono.T.mono(11, .regular))
-                                    .foregroundColor(Mono.C.positive)
-                            } else if case .error(let msg) = backupStatus {
-                                Text(msg)
-                                    .font(Mono.T.mono(11, .regular))
-                                    .foregroundColor(Mono.C.negative)
-                            }
-                        } action: {
+                        // Backup Now — standalone CTA button
+                        Button {
                             manualBackup()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: {
+                                    if case .success(_) = backupStatus { return "checkmark.circle.fill" }
+                                    if case .error(_)   = backupStatus { return "exclamationmark.circle.fill" }
+                                    return "arrow.clockwise.circle.fill"
+                                }())
+                                .font(.system(size: 15, weight: .semibold))
+
+                                Text({
+                                    if case .success(let m) = backupStatus { return m }
+                                    if case .error(let m)   = backupStatus { return m }
+                                    return "Backup Now"
+                                }())
+                                .font(Mono.T.mono(14, .semibold))
+                            }
+                            .foregroundColor({
+                                if case .error(_) = backupStatus { return Mono.C.negative }
+                                return Mono.C.bg
+                            }())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(
+                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                    .fill({
+                                        if case .success(_) = backupStatus { return Mono.C.positive }
+                                        if case .error(_)   = backupStatus { return Mono.C.negative.opacity(0.12) }
+                                        return Mono.C.text
+                                    }() as Color)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
+                                            .strokeBorder({
+                                                if case .error(_) = backupStatus { return Mono.C.negative.opacity(0.5) }
+                                                return Color.clear
+                                            }() as Color, lineWidth: 1)
+                                    )
+                            )
                         }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, Mono.S.md)
+                        .padding(.top, Mono.S.sm)
+                        .padding(.bottom, Mono.S.md)
+                        .animation(.spring(duration: 0.3, bounce: 0.2), value: {
+                            if case .idle = backupStatus { return 0 }
+                            if case .success(_) = backupStatus { return 1 }
+                            return 2
+                        }() as Int)
 
                         MonoDivider().padding(.horizontal, Mono.S.md)
 

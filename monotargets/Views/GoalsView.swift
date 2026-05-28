@@ -391,7 +391,7 @@ struct ToolbarFilterPill: View {
 // Legacy alias — HistoryView uses this name for the category sub-filter
 typealias MiniFilterPill = ToolbarFilterPill
 
-// MARK: - Goal Card (redesigned)
+// MARK: - Goal Card (premium redesign)
 
 struct GoalCard: View {
     let item: SavingsItem
@@ -403,51 +403,72 @@ struct GoalCard: View {
 
     private var urgencyColor: Color {
         guard let days = item.daysUntilTarget else { return .clear }
-        if days < 0   { return Mono.C.red.opacity(0.6) }
-        if days <= 14 { return Color(red: 1, green: 0.55, blue: 0).opacity(0.6) }
+        if days < 0   { return Mono.C.red.opacity(0.65) }
+        if days <= 14 { return Color(red: 1, green: 0.55, blue: 0).opacity(0.65) }
         return .clear
+    }
+
+    private var accentForProgress: Color {
+        item.isFullyFunded ? Mono.C.text : Mono.C.accent
     }
 
     var body: some View {
         Button(action: { onTap(); Haptic.light() }) {
             VStack(spacing: 0) {
-                // Main content row
-                HStack(spacing: 14) {
+
+                // ── Top progress glow strip ───────────────────────────
+                // Subtle colored bar behind the card top, visible only when funded
+                if item.progress > 0 {
+                    GeometryReader { geo in
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [accentForProgress.opacity(0.18), .clear],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(geo.size.width * item.progress, 0))
+                    }
+                    .frame(height: 3)
+                } else {
+                    Color.clear.frame(height: 3)
+                }
+
+                // ── Main body ─────────────────────────────────────────
+                HStack(alignment: .top, spacing: 14) {
+
                     // Icon / Photo
-                    ZStack {
-                        if let data = item.photoData, let ui = UIImage(data: data) {
-                            Image(uiImage: ui)
-                                .resizable().scaledToFill()
-                                .frame(width: 56, height: 56)
-                                .clipShape(RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous))
-                        } else {
-                            RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
-                                .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceTop)
-                                .frame(width: 56, height: 56)
-                            Image(systemName: item.icon)
-                                .font(.system(size: 22, weight: .medium))
-                                .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
-                        }
-                        // Boost bolt overlay
-                        if item.isBoostActive {
-                            VStack {
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "bolt.fill")
-                                        .font(.system(size: 8, weight: .bold))
-                                        .foregroundColor(Mono.C.bg)
-                                        .padding(3)
-                                        .background(Circle().fill(Mono.C.accent))
-                                        .offset(x: 4, y: -4)
-                                }
-                                Spacer()
+                    ZStack(alignment: .topTrailing) {
+                        Group {
+                            if let data = item.photoData, let ui = UIImage(data: data) {
+                                Image(uiImage: ui)
+                                    .resizable().scaledToFill()
+                                    .frame(width: 52, height: 52)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            } else {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(item.isFullyFunded ? Mono.C.text : Mono.C.surfaceTop)
+                                    .frame(width: 52, height: 52)
+                                    .overlay(
+                                        Image(systemName: item.icon)
+                                            .font(.system(size: 20, weight: .medium))
+                                            .foregroundColor(item.isFullyFunded ? Mono.C.bg : Mono.C.textSec)
+                                    )
                             }
                         }
+                        if item.isBoostActive {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(Mono.C.bg)
+                                .padding(2.5)
+                                .background(Circle().fill(Mono.C.accent))
+                                .offset(x: 5, y: -5)
+                        }
                     }
-                    .frame(width: 56, height: 56)
+                    .frame(width: 52, height: 52)
 
-                    // Middle: name + desc
-                    VStack(alignment: .leading, spacing: 3) {
+                    // Middle: name + amount
+                    VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 6) {
                             Text(item.name)
                                 .font(Mono.T.mono(15, .semibold))
@@ -456,64 +477,64 @@ struct GoalCard: View {
                             if item.isFavorite {
                                 Image(systemName: "star.fill")
                                     .font(.system(size: 9))
-                                    .foregroundColor(Mono.C.accent.opacity(0.8))
+                                    .foregroundColor(Mono.C.accent.opacity(0.85))
                             }
                         }
-                        if !item.itemDescription.isEmpty {
-                            Text(item.itemDescription)
-                                .font(Mono.T.mono(11, .regular))
-                                .foregroundColor(Mono.C.textTert)
-                                .lineLimit(1)
-                        }
-                        // Amount sub-label
                         HStack(alignment: .lastTextBaseline, spacing: 4) {
                             Text(item.assignedAmount.indianFormattedCompact)
-                                .font(Mono.T.mono(13, .semibold))
+                                .font(Mono.T.mono(14, .semibold))
                                 .foregroundColor(Mono.C.textSec)
                             Text("/ \(item.targetAmount.indianFormattedCompact)")
                                 .font(Mono.T.mono(11, .regular))
                                 .foregroundColor(Mono.C.textTert)
                         }
+                        if !item.itemDescription.isEmpty {
+                            Text(item.itemDescription)
+                                .font(Mono.T.mono(10, .regular))
+                                .foregroundColor(Mono.C.textTert)
+                                .lineLimit(1)
+                        }
                     }
 
-                    Spacer()
+                    Spacer(minLength: 4)
 
-                    // Right: percentage ring
-                    ZStack {
-                        Circle()
-                            .stroke(Mono.C.surfaceTop, lineWidth: 3)
-                        Circle()
-                            .trim(from: 0, to: item.progress)
-                            .stroke(item.isFullyFunded ? Mono.C.text : Mono.C.accent,
-                                    style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                        Text("\(Int(item.progress * 100))%")
-                            .font(Mono.T.mono(10, .bold))
-                            .foregroundColor(Mono.C.text)
+                    // Right: large bold percentage
+                    VStack(alignment: .trailing, spacing: 0) {
+                        HStack(alignment: .firstTextBaseline, spacing: 1) {
+                            Text("\(Int(item.progress * 100))")
+                                .font(Mono.T.mono(30, .bold))
+                                .foregroundColor(item.progress > 0 ? accentForProgress : Mono.C.textDim)
+                                .contentTransition(.numericText(countsDown: false))
+                            Text("%")
+                                .font(Mono.T.mono(14, .semibold))
+                                .foregroundColor(Mono.C.textTert)
+                                .baselineOffset(3)
+                        }
                     }
-                    .frame(width: 44, height: 44)
+                    .padding(.top, 2)
                 }
                 .padding(.horizontal, Mono.S.md)
                 .padding(.top, Mono.S.md)
                 .padding(.bottom, 10)
 
-                // Progress bar (full width)
+                // ── Progress bar (full-width, 4px) ────────────────────
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Rectangle().fill(Mono.C.surfaceTop)
                         Rectangle()
                             .fill(
-                                LinearGradient(colors: [Mono.C.accent.opacity(0.7), Mono.C.accent],
-                                               startPoint: .leading, endPoint: .trailing)
+                                LinearGradient(
+                                    colors: [accentForProgress.opacity(0.55), accentForProgress],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
                             )
                             .frame(width: max(geo.size.width * item.progress, 0))
                     }
                 }
-                .frame(height: 3)
+                .frame(height: 4)
 
-                // Bottom info row
-                HStack(spacing: 0) {
-                    // Left: ETA or target date
+                // ── Footer row ────────────────────────────────────────
+                HStack {
                     HStack(spacing: 4) {
                         if let days = item.daysUntilTarget {
                             Image(systemName: "calendar")
@@ -534,27 +555,31 @@ struct GoalCard: View {
                                 .foregroundColor(Mono.C.textDim)
                         }
                     }
+                    .foregroundColor(Mono.C.textDim)
                     .padding(.leading, Mono.S.md)
 
                     Spacer()
 
-                    // Right: remaining
                     Text(item.remaining.indianFormattedCompact + " left")
                         .font(Mono.T.mono(10, .regular))
                         .foregroundColor(Mono.C.textDim)
                         .padding(.trailing, Mono.S.md)
                 }
-                .frame(height: 32)
+                .frame(height: 34)
             }
             .background(
                 RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous)
                     .fill(Mono.G.cardSubtle)
                     .overlay(
                         RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous)
-                            .strokeBorder(urgencyColor == .clear ? Mono.C.border : urgencyColor, lineWidth: urgencyColor == .clear ? 0.5 : 1)
+                            .strokeBorder(
+                                urgencyColor == .clear ? Mono.C.border : urgencyColor,
+                                lineWidth: urgencyColor == .clear ? 0.5 : 1.2
+                            )
                     )
-                    .shadow(color: .black.opacity(0.5), radius: 16, x: 0, y: 6)
+                    .shadow(color: .black.opacity(0.45), radius: 14, x: 0, y: 5)
             )
+            .clipShape(RoundedRectangle(cornerRadius: Mono.R.card, style: .continuous))
             .matchedTransitionSource(id: item.id, in: namespace)
         }
         .buttonStyle(CardPressStyle())

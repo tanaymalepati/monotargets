@@ -111,7 +111,7 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Vault Hero Card (balance + score ring)
+// MARK: - Vault Hero Card (redesigned)
 
 struct VaultHeroCard: View {
     @Environment(AppStore.self) private var store
@@ -121,74 +121,138 @@ struct VaultHeroCard: View {
 
     @State private var innerScale: CGFloat = 1.0
 
+    private var assignedFraction: Double {
+        guard store.totalBalance > 0 else { return 0 }
+        return min(store.totalAssigned / store.totalBalance, 1.0)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // Top row: greeting + vault score ring
-            HStack(alignment: .top, spacing: Mono.S.md) {
-                // Left: balance
-                VStack(alignment: .leading, spacing: Mono.S.xs) {
+
+            // ── Section 1: Greeting + Score ──────────────────────────
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
                     if !userName.isEmpty {
-                        Text("Hey, \(userName).")
+                        Text("Hey, \(userName) 👋")
                             .font(Mono.T.mono(13, .regular))
                             .foregroundColor(Mono.C.textTert)
                     }
                     OverlineLabel(text: "Total Balance")
-                        .padding(.bottom, 2)
-
-                    AnimatedAmountText(
-                        digits: String(Int(max(store.totalBalance, 0))),
-                        fontSize: 44,
-                        weight: .bold
-                    )
-
-                    Text(VaultDateFormatter.display.string(from: Date()))
-                        .font(Mono.T.label)
-                        .foregroundColor(Mono.C.textTert)
                 }
 
                 Spacer()
 
-                // Right: score ring
-                Button { showAchievements = true } label: {
-                    VaultScoreRing(score: store.vaultScore, size: 88, lineWidth: 8)
+                // Score chip — tappable
+                Button { showAchievements = true; Haptic.light() } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(Mono.C.accent)
+                        Text("\(store.vaultScore)")
+                            .font(Mono.T.mono(14, .bold))
+                            .foregroundColor(Mono.C.text)
+                        Text("/ 1000")
+                            .font(Mono.T.mono(10, .regular))
+                            .foregroundColor(Mono.C.textDim)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Mono.C.surfaceTop)
+                            .overlay(Capsule(style: .continuous)
+                                .strokeBorder(Mono.C.accent.opacity(0.3), lineWidth: 0.8))
+                    )
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, Mono.S.lg)
             .padding(.top, Mono.S.lg)
+            .padding(.bottom, Mono.S.sm)
+
+            // ── Section 2: Massive balance ───────────────────────────
+            HStack(alignment: .bottom) {
+                AnimatedAmountText(
+                    digits: String(Int(max(store.totalBalance, 0))),
+                    fontSize: 46,
+                    weight: .bold
+                )
+                Spacer()
+                Text(VaultDateFormatter.display.string(from: Date()))
+                    .font(Mono.T.mono(11, .regular))
+                    .foregroundColor(Mono.C.textTert)
+                    .padding(.bottom, 6)
+            }
+            .padding(.horizontal, Mono.S.lg)
+            .padding(.bottom, Mono.S.lg)
+
+            MonoDivider().padding(.horizontal, Mono.S.lg)
+
+            // ── Section 3: Allocation split ──────────────────────────
+            HStack(spacing: 0) {
+                // Free cash — tappable
+                VStack(alignment: .leading, spacing: 3) {
+                    OverlineLabel(text: "Free Cash", opacity: 0.45)
+                    Text(store.totalUnassigned.indianFormattedCompact)
+                        .font(Mono.T.mono(20, .semibold))
+                        .foregroundColor(Mono.C.text)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, Mono.S.lg)
+
+                Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 44)
+
+                // Assigned
+                VStack(alignment: .trailing, spacing: 3) {
+                    OverlineLabel(text: "In Goals", opacity: 0.45)
+                    Text(store.totalAssigned.indianFormattedCompact)
+                        .font(Mono.T.mono(20, .semibold))
+                        .foregroundColor(Mono.C.textSec)
+                        .minimumScaleFactor(0.75)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, Mono.S.lg)
+            }
+            .padding(.vertical, Mono.S.md)
+
+            // Allocation bar with inline % label
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Track
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(Mono.C.surfaceTop)
+                        .frame(height: 6)
+                    // Fill
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Mono.C.accent.opacity(0.6), Mono.C.accent],
+                                startPoint: .leading, endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(geo.size.width * assignedFraction, 0), height: 6)
+                        .animation(.spring(duration: 0.8, bounce: 0.15), value: assignedFraction)
+                }
+            }
+            .frame(height: 6)
+            .padding(.horizontal, Mono.S.lg)
             .padding(.bottom, Mono.S.md)
 
             MonoDivider().padding(.horizontal, Mono.S.lg)
 
-            // Balance breakdown
-            HStack(spacing: 0) {
-                BalanceStat(label: "Unassigned", amount: store.totalUnassigned, icon: "circle.dotted")
-                    .frame(maxWidth: .infinity)
-                Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 48)
-                BalanceStat(label: "Assigned", amount: store.totalAssigned, icon: "checkmark.circle")
-                    .frame(maxWidth: .infinity)
-            }
-            .padding(.top, Mono.S.md)
-            .padding(.bottom, Mono.S.sm)
-
-            // Progress bar
-            BalanceSegmentBar(assigned: store.totalAssigned, unassigned: store.totalUnassigned)
-                .padding(.horizontal, Mono.S.lg)
-                .padding(.bottom, Mono.S.md)
-
-            MonoDivider().padding(.horizontal, Mono.S.lg)
-
-            // Bottom stats row
+            // ── Section 4: Quick stats ───────────────────────────────
             HStack(spacing: 0) {
                 MiniStat(value: "\(store.savingsItems.count)", label: "Goals")
                     .frame(maxWidth: .infinity)
+                Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 32)
                 MiniStat(value: "\(store.completedGoals)", label: "Funded")
                     .frame(maxWidth: .infinity)
+                Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 32)
                 MiniStat(value: "\(store.transactions.count)", label: "Entries")
                     .frame(maxWidth: .infinity)
             }
             .padding(.vertical, Mono.S.md)
-            .padding(.horizontal, Mono.S.lg)
         }
         .monoHeroCard()
         .scaleEffect(innerScale)
@@ -683,27 +747,6 @@ struct BalanceHeroCard: View {
     }
 }
 
-struct BalanceStat: View {
-    let label: String
-    let amount: Double
-    let icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Mono.C.textTert)
-                OverlineLabel(text: label)
-            }
-            Text(amount.indianFormattedCompact)
-                .font(Mono.T.mono(22, .semibold))
-                .foregroundColor(Mono.C.text)
-        }
-        .padding(.horizontal, Mono.S.lg)
-        .padding(.bottom, Mono.S.sm)
-    }
-}
 
 struct MiniStat: View {
     let value: String
