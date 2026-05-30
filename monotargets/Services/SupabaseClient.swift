@@ -27,7 +27,53 @@ struct SupabaseUser: Codable {
 
 struct AuthError: Codable, LocalizedError {
     let message: String
-    var errorDescription: String? { message }
+    var errorDescription: String? { AuthError.friendlyMessage(message) }
+
+    // Supabase returns errors in several shapes — normalise them all
+    init(message: String) { self.message = message }
+
+    // Shape 1: { "msg": "...", "error_code": "..." }
+    // Shape 2: { "error": "...", "error_description": "..." }
+    // Shape 3: { "message": "..." }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: DynamicKey.self)
+        if let v = try? c.decode(String.self, forKey: DynamicKey("msg")) {
+            message = v
+        } else if let v = try? c.decode(String.self, forKey: DynamicKey("error_description")) {
+            message = v
+        } else if let v = try? c.decode(String.self, forKey: DynamicKey("error")) {
+            message = v
+        } else if let v = try? c.decode(String.self, forKey: DynamicKey("message")) {
+            message = v
+        } else {
+            message = "Unknown error"
+        }
+    }
+
+    static func friendlyMessage(_ raw: String) -> String {
+        switch raw.lowercased() {
+        case let s where s.contains("invalid login") || s.contains("invalid_credentials") || s.contains("invalid grant"):
+            return "Incorrect email or password."
+        case let s where s.contains("email not confirmed"):
+            return "Please confirm your email before signing in. Check your inbox."
+        case let s where s.contains("user already registered") || s.contains("already been registered"):
+            return "An account with this email already exists. Try signing in."
+        case let s where s.contains("password should be"):
+            return "Password must be at least 6 characters."
+        case let s where s.contains("unable to validate email"):
+            return "Please enter a valid email address."
+        default:
+            return raw
+        }
+    }
+}
+
+private struct DynamicKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init(_ string: String) { stringValue = string }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
 }
 
 // MARK: - Session persistence
@@ -182,11 +228,19 @@ actor SupabaseClient {
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-            let err = (try? JSONDecoder().decode(AuthError.self, from: data))
-                ?? AuthError(message: "HTTP \(http.statusCode)")
-            throw err
+            // Try all known Supabase error shapes
+            if let err = try? JSONDecoder().decode(AuthError.self, from: data) {
+                throw err
+            }
+            let raw = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
+            throw AuthError(message: raw)
         }
-        return try JSONDecoder().decode(T.self, from: data)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            let raw = String(data: data, encoding: .utf8) ?? "Decode failed"
+            throw AuthError(message: "Response parse error: \(raw)")
+        }
     }
 
     private func upsert(table: String, body: [String: Any], onConflict: String) async throws {
