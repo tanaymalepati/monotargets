@@ -379,54 +379,12 @@ final class AppStore {
         return false
     }
 
-    // MARK: - Persistence
+    // MARK: - Persistence (Supabase only — no local file I/O)
 
-    private var dataURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("vault_data.json")
-    }
+    init() {} // data loaded from cloud after auth
 
-    init() { load() }
-
-    private func load() {
-        guard
-            let data    = try? Data(contentsOf: dataURL),
-            let decoded = try? JSONDecoder().decode(VaultData.self, from: data)
-        else { return }
-        transactions         = decoded.transactions
-        savingsItems         = decoded.savingsItems
-        backupFolderBookmark = decoded.backupFolderBookmark
-
-        // Gamification
-        earnedAchievements   = decoded.earnedAchievements
-        streakCount          = decoded.streakCount
-        lastStreakDate        = decoded.lastStreakDate
-        longestStreak         = decoded.longestStreak
-        budgets              = decoded.budgets
-        activeChallenges     = decoded.activeChallenges
-        dismissedWeeklyRecap = decoded.dismissedWeeklyRecap
-        customCategories     = decoded.customCategories
-    }
-
+    /// Fire-and-forget cloud sync. Called after every mutation.
     func save() {
-        let payload = VaultData(
-            transactions:         transactions,
-            savingsItems:         savingsItems,
-            backupFolderBookmark: backupFolderBookmark,
-            earnedAchievements:   earnedAchievements,
-            streakCount:          streakCount,
-            lastStreakDate:       lastStreakDate,
-            longestStreak:        longestStreak,
-            budgets:              budgets,
-            activeChallenges:     activeChallenges,
-            dismissedWeeklyRecap: dismissedWeeklyRecap,
-            customCategories:     customCategories
-        )
-        if let data = try? JSONEncoder().encode(payload) {
-            try? data.write(to: dataURL, options: .atomic)
-        }
-        BackupService.shared.triggerBackup(store: self)
-        // Non-blocking cloud sync
         Task { await syncToSupabase() }
     }
 
@@ -540,53 +498,9 @@ final class AppStore {
         save()
     }
 
-    // MARK: - Backup folder
+    // MARK: - Cloud sync helpers
 
-    func setBackupFolder(bookmark: Data) {
-        backupFolderBookmark = bookmark
-        save()
-    }
-
-    // MARK: - Clear All Data
-
-    func clearAllData() {
-        savingsItems.forEach { cancelReminder(for: $0.id) }
-        transactions         = []
-        savingsItems         = []
-        earnedAchievements   = []
-        streakCount          = 0
-        lastStreakDate        = nil
-        longestStreak         = 0
-        budgets              = []
-        activeChallenges     = []
-        dismissedWeeklyRecap = nil
-        customCategories     = []
-        UserDefaults.standard.removeObject(forKey: "onboarding_done")
-        UserDefaults.standard.removeObject(forKey: "user_name")
-        save()
-    }
-
-    // MARK: - Vault Snapshot
-
-    var currentVaultData: VaultData {
-        VaultData(
-            transactions:         transactions,
-            savingsItems:         savingsItems,
-            backupFolderBookmark: backupFolderBookmark,
-            earnedAchievements:   earnedAchievements,
-            streakCount:          streakCount,
-            lastStreakDate:       lastStreakDate,
-            longestStreak:        longestStreak,
-            budgets:              budgets,
-            activeChallenges:     activeChallenges,
-            dismissedWeeklyRecap: dismissedWeeklyRecap,
-            customCategories:     customCategories
-        )
-    }
-
-    // MARK: - Supabase Sync
-
-    /// Replace in-memory + local state with data fetched from Supabase.
+    /// Replace in-memory state from a Supabase download.
     @MainActor
     func replaceData(with remote: VaultData) {
         transactions         = remote.transactions
@@ -599,19 +513,13 @@ final class AppStore {
         activeChallenges     = remote.activeChallenges
         dismissedWeeklyRecap = remote.dismissedWeeklyRecap
         customCategories     = remote.customCategories
-        // persist locally so offline works
-        if let data = try? JSONEncoder().encode(remote) {
-            try? data.write(to: dataURL, options: .atomic)
-        }
     }
 
-    /// Push current data to Supabase (no-op if not signed in).
     func syncToSupabase() async {
         guard await SupabaseClient.shared.isSignedIn else { return }
         let payload = VaultData(
             transactions:         transactions,
             savingsItems:         savingsItems,
-            backupFolderBookmark: backupFolderBookmark,
             earnedAchievements:   earnedAchievements,
             streakCount:          streakCount,
             lastStreakDate:       lastStreakDate,
@@ -622,6 +530,28 @@ final class AppStore {
             customCategories:     customCategories
         )
         try? await SupabaseClient.shared.uploadVaultData(payload)
+    }
+
+    // MARK: - Clear (used on sign-out / account deletion)
+
+    @MainActor
+    func clearAll() {
+        savingsItems.forEach { cancelReminder(for: $0.id) }
+        transactions = []; savingsItems = []; earnedAchievements = []
+        streakCount = 0; lastStreakDate = nil; longestStreak = 0
+        budgets = []; activeChallenges = []; dismissedWeeklyRecap = nil
+        customCategories = []; newlyUnlockedAchievements = []
+        UserDefaults.standard.removeObject(forKey: "user_name")
+    }
+
+    var currentVaultData: VaultData {
+        VaultData(
+            transactions: transactions, savingsItems: savingsItems,
+            earnedAchievements: earnedAchievements, streakCount: streakCount,
+            lastStreakDate: lastStreakDate, longestStreak: longestStreak,
+            budgets: budgets, activeChallenges: activeChallenges,
+            dismissedWeeklyRecap: dismissedWeeklyRecap, customCategories: customCategories
+        )
     }
 
     // MARK: - Stats / Queries

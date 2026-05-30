@@ -1,331 +1,129 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct SettingsView: View {
-    @Environment(AppStore.self) private var store
-    @AppStorage("user_name")           private var userName       = ""
-    @AppStorage("currency_code")       private var currencyCode   = "INR"
-    @AppStorage("onboarding_done")     private var onboardingDone = true
-    @AppStorage("smart_eta_enabled")   private var etaEnabled     = true
+    @Environment(AppStore.self)  private var store
+    @Environment(AuthState.self) private var authState
+    @AppStorage("currency_code")     private var currencyCode = "INR"
+    @AppStorage("smart_eta_enabled") private var etaEnabled   = true
 
-    @State private var showFolderPicker    = false
-    @State private var showRestorePicker   = false
-    @State private var backupStatus: BackupStatus = .idle
-    @State private var appeared            = false
-    @State private var liveBackupInfo: (count: Int, oldest: Date?, newest: Date?) = (0, nil, nil)
-    @State private var showClearConfirm    = false
-    @State private var showCurrencyPicker  = false
-    @State private var showRerunConfirm    = false
-    @State private var showBudgets         = false
+    @State private var appeared           = false
+    @State private var showCurrencyPicker = false
+    @State private var showBudgets        = false
     @State private var showCustomCategories = false
-    @State private var showConnectAccount  = false
-    @State private var showSignOutConfirm  = false
+    @State private var showClearConfirm   = false
 
-    private var isOfflineMode:  Bool   { UserDefaults.standard.bool(forKey: "offline_mode") }
-    private var currentUsername: String? { UserDefaults.standard.string(forKey: "user_name") }
-
-    enum BackupStatus: Equatable {
-        case idle, success(String), error(String)
-    }
-
-    private var backupFolderName: String? {
-        guard let bookmark = store.backupFolderBookmark else { return nil }
-        var isStale = false
-        guard let url = try? URL(
-            resolvingBookmarkData: bookmark,
-            options: .withoutUI,
-            relativeTo: nil,
-            bookmarkDataIsStale: &isStale
-        ) else { return nil }
-        return url.lastPathComponent
-    }
-
-    private var lastBackupText: String {
-        guard let date = BackupService.shared.lastBackupDate else { return "Never" }
-        let cal = Calendar.current
-        if cal.isDateInToday(date) {
-            let fmt = DateFormatter()
-            fmt.dateFormat = "h:mm a"
-            return "Today, \(fmt.string(from: date))"
-        }
-        if cal.isDateInYesterday(date) {
-            let fmt = DateFormatter()
-            fmt.dateFormat = "h:mm a"
-            return "Yesterday, \(fmt.string(from: date))"
-        }
-        return VaultDateFormatter.display.string(from: date)
-    }
+    private var username: String { UserDefaults.standard.string(forKey: "user_name") ?? "" }
 
     var body: some View {
         ZStack {
             Mono.C.bg.ignoresSafeArea()
-
             ScrollView(showsIndicators: false) {
                 VStack(spacing: Mono.S.lg) {
 
-                    // App header
                     AppHeaderCard()
                         .padding(.horizontal, Mono.S.md)
                         .padding(.top, Mono.S.sm)
                         .opacity(appeared ? 1 : 0)
                         .scaleEffect(appeared ? 1 : 0.92)
 
-                    // Preferences section
-                    SettingsSection(title: "Preferences") {
-                        // Name row
-                        SettingsRow(icon: "person.fill", label: "Your Name") {
-                            Text(userName.isEmpty ? "Not set" : userName)
-                                .font(Mono.T.mono(13, .regular))
-                                .foregroundColor(userName.isEmpty ? Mono.C.textDim : Mono.C.textSec)
-                        } action: {
-                            showCurrencyPicker = false
-                            // Inline edit via alert-style — handled in sheet below
-                            showRerunConfirm = false
+                    // ── Account / Profile ────────────────────────────────────
+                    SettingsSection(title: "Account") {
+                        NavigationLink {
+                            UserProfileView()
+                                .environment(store)
+                                .environment(authState)
+                        } label: {
+                            HStack(spacing: Mono.S.md) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Mono.C.accent.opacity(0.15))
+                                        .frame(width: 38, height: 38)
+                                    Text(String(username.prefix(1)).uppercased())
+                                        .font(Mono.T.mono(16, .bold))
+                                        .foregroundColor(Mono.C.accent)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("@\(username)")
+                                        .font(Mono.T.mono(15, .semibold))
+                                        .foregroundColor(Mono.C.text)
+                                    HStack(spacing: 4) {
+                                        Circle().fill(Mono.C.accent).frame(width: 5, height: 5)
+                                        Text("Live sync enabled")
+                                            .font(Mono.T.mono(11, .regular))
+                                            .foregroundColor(Mono.C.accent)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(Mono.C.textDim)
+                            }
+                            .frame(minHeight: 56)
+                            .padding(.horizontal, Mono.S.md)
                         }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, Mono.S.md)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 16)
 
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-
-                        // Currency row
+                    // ── Preferences ──────────────────────────────────────────
+                    SettingsSection(title: "Preferences") {
                         SettingsRow(icon: "coloncurrencysign.circle.fill", label: "Currency") {
                             if let cur = CurrencyInfo.all.first(where: { $0.code == currencyCode }) {
                                 HStack(spacing: 4) {
                                     Text(cur.flag)
                                     Text("\(cur.code) \(cur.symbol)")
-                                        .font(Mono.T.mono(13, .medium))
-                                        .foregroundColor(Mono.C.textSec)
+                                        .font(Mono.T.mono(13, .medium)).foregroundColor(Mono.C.textSec)
                                 }
                             }
-                        } action: {
-                            showCurrencyPicker = true
-                            Haptic.light()
-                        }
+                        } action: { showCurrencyPicker = true; Haptic.light() }
 
                         MonoDivider().padding(.horizontal, Mono.S.md)
 
-                        // Smart ETA toggle
                         HStack(spacing: Mono.S.md) {
                             Image(systemName: "clock.arrow.2.circlepath")
                                 .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(Mono.C.textSec)
-                                .frame(width: 22)
-
+                                .foregroundColor(Mono.C.textSec).frame(width: 22)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Smart Goal ETA")
-                                    .font(Mono.T.mono(15, .medium))
-                                    .foregroundColor(Mono.C.text)
+                                Text("Smart Goal ETA").font(Mono.T.mono(15, .medium)).foregroundColor(Mono.C.text)
                                 Text("Estimated time to fund each goal")
-                                    .font(Mono.T.mono(11, .regular))
-                                    .foregroundColor(Mono.C.textDim)
+                                    .font(Mono.T.mono(11, .regular)).foregroundColor(Mono.C.textDim)
                             }
-
                             Spacer()
-
-                            Toggle("", isOn: $etaEnabled)
-                                .tint(Mono.C.text)
-                                .labelsHidden()
+                            Toggle("", isOn: $etaEnabled).tint(Mono.C.text).labelsHidden()
                                 .onChange(of: etaEnabled) { _, _ in Haptic.select() }
                         }
-                        .frame(minHeight: 52)
-                        .padding(.horizontal, Mono.S.md)
+                        .frame(minHeight: 52).padding(.horizontal, Mono.S.md)
                         .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation { etaEnabled.toggle() }
-                            Haptic.select()
-                        }
+                        .onTapGesture { withAnimation { etaEnabled.toggle() }; Haptic.select() }
 
                         MonoDivider().padding(.horizontal, Mono.S.md)
 
-                        // Custom Categories row
                         SettingsRow(icon: "tag.fill", label: "Custom Categories") {
                             Text("\(store.customCategories.count) custom")
-                                .font(Mono.T.mono(13, .regular))
-                                .foregroundColor(Mono.C.textSec)
-                        } action: {
-                            showCustomCategories = true
-                            Haptic.light()
-                        }
+                                .font(Mono.T.mono(13, .regular)).foregroundColor(Mono.C.textSec)
+                        } action: { showCustomCategories = true; Haptic.light() }
                     }
                     .padding(.horizontal, Mono.S.md)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 16)
+                    .opacity(appeared ? 1 : 0).offset(y: appeared ? 0 : 16)
 
-                    // Budget section
+                    // ── Appearance ───────────────────────────────────────────
+                    SettingsSection(title: "Appearance") { AppearanceToggleRow() }
+                        .padding(.horizontal, Mono.S.md)
+                        .opacity(appeared ? 1 : 0).offset(y: appeared ? 0 : 16)
+
+                    // ── Budgets ──────────────────────────────────────────────
                     SettingsSection(title: "Budgets") {
                         SettingsRow(icon: "chart.bar.fill", label: "Monthly Budgets") {
                             Text("\(store.budgets.count) set")
-                                .font(Mono.T.mono(13, .regular))
-                                .foregroundColor(Mono.C.textSec)
-                        } action: {
-                            showBudgets = true
-                            Haptic.light()
-                        }
+                                .font(Mono.T.mono(13, .regular)).foregroundColor(Mono.C.textSec)
+                        } action: { showBudgets = true; Haptic.light() }
                     }
                     .padding(.horizontal, Mono.S.md)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 16)
+                    .opacity(appeared ? 1 : 0).offset(y: appeared ? 0 : 16)
 
-                    // Backup & Restore section
-                    SettingsSection(title: "Backup & Restore") {
-                        SettingsRow(icon: "folder.fill", label: "Backup Folder") {
-                            VStack(alignment: .trailing, spacing: 2) {
-                                if let name = backupFolderName {
-                                    Text(name)
-                                        .font(Mono.T.mono(13, .medium))
-                                        .foregroundColor(Mono.C.textSec)
-                                } else {
-                                    Text("Not set")
-                                        .font(Mono.T.mono(13, .regular))
-                                        .foregroundColor(Mono.C.textDim)
-                                }
-                            }
-                        } action: {
-                            showFolderPicker = true
-                        }
-
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-
-                        // Last backup row (non-tappable info row)
-                        HStack(spacing: Mono.S.md) {
-                            Image(systemName: "clock.fill")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(Mono.C.textSec)
-                                .frame(width: 22)
-                            Text("Last Backup")
-                                .font(Mono.T.mono(15, .medium))
-                                .foregroundColor(Mono.C.text)
-                                .lineLimit(1)
-                                .layoutPriority(1)
-                            Spacer()
-                            Text(lastBackupText)
-                                .font(Mono.T.mono(13, .regular))
-                                .foregroundColor(BackupService.shared.lastBackupDate == nil ? Mono.C.textDim : Mono.C.textSec)
-                                .lineLimit(1)
-                        }
-                        .frame(minHeight: 52)
-                        .padding(.horizontal, Mono.S.md)
-
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-
-                        // Backup count row
-                        HStack(spacing: Mono.S.md) {
-                            Image(systemName: "doc.on.doc.fill")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(Mono.C.textSec)
-                                .frame(width: 22)
-                            Text("Snapshots")
-                                .font(Mono.T.mono(15, .medium))
-                                .foregroundColor(Mono.C.text)
-                                .lineLimit(1)
-                                .layoutPriority(1)
-                            Spacer()
-                            HStack(spacing: 4) {
-                                Text("\(liveBackupInfo.count)")
-                                    .font(Mono.T.mono(13, .semibold))
-                                    .foregroundColor(Mono.C.textSec)
-                                Text("/ \(BackupService.maxBackups)")
-                                    .font(Mono.T.mono(13, .regular))
-                                    .foregroundColor(Mono.C.textDim)
-                            }
-                        }
-                        .frame(minHeight: 52)
-                        .padding(.horizontal, Mono.S.md)
-
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-
-                        // Backup Now — standalone CTA button
-                        Button {
-                            manualBackup()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: {
-                                    if case .success(_) = backupStatus { return "checkmark.circle.fill" }
-                                    if case .error(_)   = backupStatus { return "exclamationmark.circle.fill" }
-                                    return "arrow.clockwise.circle.fill"
-                                }())
-                                .font(.system(size: 15, weight: .semibold))
-
-                                Text({
-                                    if case .success(let m) = backupStatus { return m }
-                                    if case .error(let m)   = backupStatus { return m }
-                                    return "Backup Now"
-                                }())
-                                .font(Mono.T.mono(14, .semibold))
-                            }
-                            .foregroundColor({
-                                if case .error(_) = backupStatus { return Mono.C.negative }
-                                return Mono.C.bg
-                            }())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                                    .fill({
-                                        if case .success(_) = backupStatus { return Mono.C.positive }
-                                        if case .error(_)   = backupStatus { return Mono.C.negative.opacity(0.12) }
-                                        return Mono.C.text
-                                    }() as Color)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Mono.R.button, style: .continuous)
-                                            .strokeBorder({
-                                                if case .error(_) = backupStatus { return Mono.C.negative.opacity(0.5) }
-                                                return Color.clear
-                                            }() as Color, lineWidth: 1)
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, Mono.S.md)
-                        .padding(.top, Mono.S.sm)
-                        .padding(.bottom, Mono.S.md)
-                        .animation(.spring(duration: 0.3, bounce: 0.2), value: {
-                            if case .idle = backupStatus { return 0 }
-                            if case .success(_) = backupStatus { return 1 }
-                            return 2
-                        }() as Int)
-
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-
-                        SettingsRow(icon: "arrow.down.circle.fill", label: "Restore from JSON") {
-                            EmptyView()
-                        } action: {
-                            showRestorePicker = true
-                        }
-                    }
-                    .padding(.horizontal, Mono.S.md)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 16)
-
-                    // Backup info card
-                    VStack(alignment: .leading, spacing: Mono.S.sm) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Mono.C.textTert)
-                            Text("How Backup Works")
-                                .font(Mono.T.mono(12, .semibold))
-                                .foregroundColor(Mono.C.textTert)
-                        }
-
-                        Text("Every change automatically saves a numbered snapshot to your chosen folder — vault_backup_0.json, vault_backup_1.json, and so on. The number always increases so the highest number is always the freshest backup. The oldest files are removed once 10 snapshots exist.")
-                            .font(Mono.T.mono(11, .regular))
-                            .foregroundColor(Mono.C.textDim)
-                            .lineSpacing(4)
-                    }
-                    .padding(Mono.S.md)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .monoCard()
-                    .padding(.horizontal, Mono.S.md)
-                    .opacity(appeared ? 1 : 0)
-
-                    // Appearance section
-                    SettingsSection(title: "Appearance") {
-                        AppearanceToggleRow()
-                    }
-                    .padding(.horizontal, Mono.S.md)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 16)
-
-                    // Data stats
+                    // ── Data stats ───────────────────────────────────────────
                     SettingsSection(title: "Data") {
                         StatRow(label: "Transactions", value: "\(store.transactions.count)")
                         MonoDivider().padding(.horizontal, Mono.S.md)
@@ -333,220 +131,57 @@ struct SettingsView: View {
                         MonoDivider().padding(.horizontal, Mono.S.md)
                         StatRow(label: "Completed Goals", value: "\(store.completedGoals)")
                         MonoDivider().padding(.horizontal, Mono.S.md)
-                        StatRow(
-                            label: "Total Tracked",
-                            value: store.totalBalance.indianFormattedCompact
-                        )
+                        StatRow(label: "Total Tracked", value: store.totalBalance.indianFormattedCompact)
                     }
                     .padding(.horizontal, Mono.S.md)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 20)
+                    .opacity(appeared ? 1 : 0).offset(y: appeared ? 0 : 20)
 
-                    // Account section
-                    SettingsSection(title: "Account") {
-                        if isOfflineMode {
-                            // Offer to create/connect an account
-                            SettingsRow(icon: "person.crop.circle.badge.plus", label: "Create / Connect Account") {
-                                Text("Offline")
-                                    .font(Mono.T.mono(11, .medium))
-                                    .foregroundColor(Mono.C.textDim)
-                                    .padding(.horizontal, 7).padding(.vertical, 3)
-                                    .background(Capsule().fill(Mono.C.surfaceTop))
-                            } action: {
-                                showConnectAccount = true
-                                Haptic.light()
-                            }
-                        } else if let uname = currentUsername {
-                            // Signed-in user info
-                            SettingsRow(icon: "person.circle.fill", label: "@\(uname)") {
-                                Text("Signed In")
-                                    .font(Mono.T.mono(11, .medium))
-                                    .foregroundColor(Mono.C.accent)
-                                    .padding(.horizontal, 7).padding(.vertical, 3)
-                                    .background(Capsule().fill(Mono.C.accent.opacity(0.12)))
-                            } action: {}
-
-                            MonoDivider().padding(.horizontal, Mono.S.md)
-
-                            SettingsRow(icon: "arrow.right.circle", label: "Sign Out") {
-                                EmptyView()
-                            } action: {
-                                showSignOutConfirm = true
-                                Haptic.medium()
-                            }
-                        }
-
-                        MonoDivider().padding(.horizontal, Mono.S.md)
-
-                        SettingsRow(icon: "arrow.counterclockwise.circle.fill", label: "Re-run Setup") {
-                            EmptyView()
-                        } action: {
-                            showRerunConfirm = true
-                            Haptic.medium()
-                        }
-                    }
-                    .padding(.horizontal, Mono.S.md)
-                    .opacity(appeared ? 1 : 0)
-
-                    // Danger zone
+                    // ── Danger Zone ──────────────────────────────────────────
                     SettingsSection(title: "Danger Zone") {
                         DangerButton(icon: "trash.fill", label: "Clear All Data") {
-                            showClearConfirm = true
-                            Haptic.medium()
+                            showClearConfirm = true; Haptic.medium()
                         }
                         .padding(Mono.S.sm)
                     }
                     .padding(.horizontal, Mono.S.md)
                     .opacity(appeared ? 1 : 0)
 
-                    // Version info
                     VStack(spacing: 4) {
                         Text("MONOTARGETS")
-                            .font(Mono.T.mono(11, .bold))
-                            .foregroundColor(Mono.C.textDim)
-                            .tracking(4)
-                        Text("v1.0 · Built by tanaymalepati")
-                            .font(Mono.T.mono(10, .regular))
-                            .foregroundColor(Mono.C.textDim.opacity(0.6))
+                            .font(Mono.T.mono(11, .bold)).foregroundColor(Mono.C.textDim).tracking(4)
+                        Text("v1.0 · tanaymalepati")
+                            .font(Mono.T.mono(10, .regular)).foregroundColor(Mono.C.textDim.opacity(0.6))
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Mono.S.xl)
+                    .frame(maxWidth: .infinity).padding(.vertical, Mono.S.xl)
 
                     Spacer(minLength: 60)
                 }
             }
         }
         .onAppear {
-            withAnimation(.spring(duration: 0.6, bounce: 0.2).delay(0.05)) {
-                appeared = true
-            }
-            refreshBackupInfo()
-        }
-        // Connect / create account sheet (offline users)
-        .sheet(isPresented: $showConnectAccount) {
-            NavigationStack {
-                ConnectAccountView(onConnected: {
-                    showConnectAccount = false
-                })
-                .environment(store)
-            }
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(Mono.C.bg)
-            .presentationCornerRadius(24)
-        }
-        // Sign-out confirmation
-        .confirmationDialog("Sign out?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
-            Button("Sign Out", role: .destructive) {
-                Task {
-                    await SupabaseClient.shared.signOut()
-                    UserDefaults.standard.set(true, forKey: "offline_mode")
-                    Haptic.medium()
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You'll stay in offline mode. Your data stays on this device.")
+            withAnimation(.spring(duration: 0.6, bounce: 0.2).delay(0.05)) { appeared = true }
         }
         .sheet(isPresented: $showCustomCategories) {
             CustomCategoriesView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.hidden)
-                .presentationBackground(Mono.C.bg)
-                .presentationCornerRadius(24)
+                .presentationDetents([.large]).presentationDragIndicator(.hidden)
+                .presentationBackground(Mono.C.bg).presentationCornerRadius(24)
         }
         .sheet(isPresented: $showBudgets) {
             BudgetManagerView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.hidden)
-                .presentationBackground(Mono.C.bg)
-                .presentationCornerRadius(24)
-        }
-        .sheet(isPresented: $showFolderPicker) {
-            DocumentPicker(mode: .folder) { url in
-                showFolderPicker = false
-                handleFolderSelection(url)
-            } onCancel: {
-                showFolderPicker = false
-            }
-            .ignoresSafeArea()
-        }
-        .sheet(isPresented: $showClearConfirm) {
-            ClearDataConfirmSheet()
-                .presentationDetents([.fraction(0.62)])
-                .presentationDragIndicator(.hidden)
-                .presentationBackground { Color(white: 0.035) }
-                .presentationCornerRadius(20)
+                .presentationDetents([.large]).presentationDragIndicator(.hidden)
+                .presentationBackground(Mono.C.bg).presentationCornerRadius(24)
         }
         .sheet(isPresented: $showCurrencyPicker) {
             CurrencyPickerSheet(selected: $currencyCode)
-                .presentationDetents([.fraction(0.72)])
-                .presentationDragIndicator(.hidden)
-                .presentationBackground { Color(white: 0.035) }
-                .presentationCornerRadius(20)
+                .presentationDetents([.fraction(0.72)]).presentationDragIndicator(.hidden)
+                .presentationBackground { Color(white: 0.035) }.presentationCornerRadius(20)
         }
-        .confirmationDialog("Re-run Setup?", isPresented: $showRerunConfirm, titleVisibility: .visible) {
-            Button("Re-run Setup", role: .destructive) {
-                onboardingDone = false
-                Haptic.success()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will restart the setup flow. Your data won't be deleted.")
+        .sheet(isPresented: $showClearConfirm) {
+            ClearDataConfirmSheet()
+                .environment(store).environment(authState)
+                .presentationDetents([.fraction(0.62)]).presentationDragIndicator(.hidden)
+                .presentationBackground { Color(white: 0.035) }.presentationCornerRadius(20)
         }
-        .sheet(isPresented: $showRestorePicker) {
-            DocumentPicker(mode: .jsonFile) { url in
-                showRestorePicker = false
-                handleRestore(url)
-            } onCancel: {
-                showRestorePicker = false
-            }
-            .ignoresSafeArea()
-        }
-    }
-
-    private func handleFolderSelection(_ url: URL) {
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        if let bookmark = BackupService.shared.createBookmark(for: url) {
-            store.setBackupFolder(bookmark: bookmark)
-            backupStatus = .success("Folder set ✓")
-            Haptic.success()
-            refreshBackupInfo()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { backupStatus = .idle }
-        }
-    }
-
-    private func handleRestore(_ url: URL) {
-        if let vaultData = BackupService.shared.restoreFromURL(url) {
-            store.transactions = vaultData.transactions
-            store.savingsItems = vaultData.savingsItems
-            store.save()
-            backupStatus = .success("Restored ✓")
-            Haptic.success()
-        } else {
-            backupStatus = .error("Could not parse file")
-            Haptic.error()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { backupStatus = .idle }
-    }
-
-    private func manualBackup() {
-        guard store.backupFolderBookmark != nil else {
-            backupStatus = .error("Set a folder first")
-            Haptic.error()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { backupStatus = .idle }
-            return
-        }
-        BackupService.shared.triggerBackup(store: store)
-        backupStatus = .success("Backed up!")
-        Haptic.success()
-        refreshBackupInfo()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { backupStatus = .idle }
-    }
-
-    private func refreshBackupInfo() {
-        liveBackupInfo = BackupService.shared.liveBackupInfo(bookmark: store.backupFolderBookmark)
     }
 }
 
@@ -806,8 +441,9 @@ struct MonochromeToggle: View {
 // MARK: - Clear Data Confirmation Sheet
 
 struct ClearDataConfirmSheet: View {
-    @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(AppStore.self)  private var store
+    @Environment(AuthState.self) private var authState
+    @Environment(\.dismiss)      private var dismiss
 
     @State private var confirmText = ""
 
@@ -893,9 +529,13 @@ struct ClearDataConfirmSheet: View {
             // Delete button
             Button {
                 guard isConfirmed else { Haptic.error(); return }
-                store.clearAllData()
-                Haptic.success()
-                dismiss()
+                // Delete from Supabase, clear in-memory, sign out
+                Task {
+                    try? await SupabaseClient.shared.uploadVaultData(VaultData())
+                    await store.clearAll()
+                    Haptic.success()
+                    dismiss()
+                }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "trash.fill")

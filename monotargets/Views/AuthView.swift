@@ -253,21 +253,6 @@ struct AuthView: View {
                     .animation(.spring(duration: 0.45, bounce: 0.2).delay(0.2), value: appeared)
                     .animation(.spring(duration: 0.25), value: canSubmit)
 
-                    // ── Offline escape ─────────────────────
-                    Button {
-                        UserDefaults.standard.set(true, forKey: "offline_mode")
-                        Haptic.light()
-                        onAuthenticated()
-                    } label: {
-                        Text("Continue without account")
-                            .font(Mono.T.mono(12, .regular))
-                            .foregroundColor(Mono.C.textDim)
-                            .underline()
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 18)
-                    .opacity(appeared ? 1 : 0)
-                    .animation(.spring(duration: 0.45, bounce: 0.2).delay(0.25), value: appeared)
 
                     Spacer(minLength: 60)
                 }

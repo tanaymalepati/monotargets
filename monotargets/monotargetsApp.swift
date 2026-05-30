@@ -2,67 +2,61 @@ import SwiftUI
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
-                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        .portrait
-    }
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask { .portrait }
 }
 
 @main
 struct monotargetsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var store = AppStore()
+    @State private var store     = AppStore()
+    @State private var authState = AuthState()
 
-    // True once we've finished the async launch check
+    // launch states
     @State private var launchChecked  = false
-    // True when the user should see the main app (either logged in or offline)
-    @State private var showMainApp    = false
+    @State private var loadingData    = false
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 if !launchChecked {
                     SplashView()
-                        .transition(.opacity)
-                } else if showMainApp {
-                    ContentView()
-                        .environment(store)
-                        .transition(.opacity)
-                } else {
+                } else if !authState.isAuthenticated {
                     AuthView(onAuthenticated: {
-                        withAnimation(.easeInOut(duration: 0.35)) { showMainApp = true }
+                        withAnimation(.easeInOut(duration: 0.35)) {
+                            authState.isAuthenticated = true
+                        }
+                        // pull cloud data after sign-in
+                        Task {
+                            if let remote = try? await SupabaseClient.shared.downloadVaultData() {
+                                await store.replaceData(with: remote)
+                            }
+                        }
                     })
                     .environment(store)
+                    .environment(authState)
                     .transition(.opacity)
+                } else {
+                    ContentView()
+                        .environment(store)
+                        .environment(authState)
+                        .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: launchChecked)
-            .animation(.easeInOut(duration: 0.3), value: showMainApp)
-            .task { await checkLaunchState() }
+            .animation(.easeInOut(duration: 0.3), value: authState.isAuthenticated)
+            .task { await checkSession() }
         }
     }
 
-    private func checkLaunchState() async {
-        // 1. Already chose offline mode in a previous session
-        if UserDefaults.standard.bool(forKey: "offline_mode") {
-            launchChecked = true
-            showMainApp   = true
-            return
-        }
-
-        // 2. Stored Supabase session
+    private func checkSession() async {
+        // Restore stored session if available
         if let _ = await SupabaseClient.shared.loadStoredSession() {
-            // Pull latest cloud data before showing the app
             if let remote = try? await SupabaseClient.shared.downloadVaultData() {
                 await store.replaceData(with: remote)
             }
-            launchChecked = true
-            showMainApp   = true
-            return
+            authState.isAuthenticated = true
         }
-
-        // 3. No session, no offline flag → show auth
         launchChecked = true
-        showMainApp   = false
     }
 }
 
