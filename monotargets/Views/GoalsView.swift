@@ -3,9 +3,8 @@ import SwiftUI
 // MARK: - Goals View
 
 enum GoalLayoutMode: String {
-    case list  = "list"
-    case grid  = "grid"
-    case swipe = "swipe"
+    case list = "list"
+    case grid = "grid"
 }
 
 struct GoalsView: View {
@@ -109,10 +108,10 @@ struct GoalsView: View {
                         .frame(maxWidth: .infinity)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Mono.C.surfaceTop))
 
-                        // Layout toggle buttons
+                        // Layout toggle buttons (list / grid only)
                         if activeTab == .active {
                             HStack(spacing: 2) {
-                                ForEach([("list.bullet", "list"), ("square.grid.2x2", "grid"), ("rectangle.stack", "swipe")], id: \.1) { sym, mode in
+                                ForEach([("list.bullet", "list"), ("square.grid.2x2", "grid")], id: \.1) { sym, mode in
                                     Button {
                                         withAnimation(.spring(duration: 0.22, bounce: 0.3)) { layoutModeRaw = mode }
                                         Haptic.select()
@@ -254,14 +253,6 @@ struct GoalsView: View {
                                 appeared: appeared,
                                 onTap: { selectedItem = $0 }
                             )
-                        case .swipe:
-                            GoalSwipeLayout(
-                                items: activeItems,
-                                namespace: zoomNamespace,
-                                appeared: appeared,
-                                onTap: { selectedItem = $0 },
-                                onAdd: { showCreateGoal = true }
-                            )
                         }
                     }
                 } else {
@@ -287,8 +278,8 @@ struct GoalsView: View {
                 }
             }
 
-            // ── FAB (hidden in swipe mode — "+" is the last swipe card) ──
-            if activeTab == .active && layoutMode != .swipe {
+            // ── FAB ──────────────────────────────────────────────────────
+            if activeTab == .active {
                 HStack {
                     Spacer()
                     Button {
@@ -336,7 +327,7 @@ struct GoalsView: View {
     }
 }
 
-// MARK: - Goals Hero Header
+// MARK: - Goals Hero Header (compact)
 
 struct GoalsHeroHeader: View {
     let progress:       Double
@@ -349,70 +340,56 @@ struct GoalsHeroHeader: View {
     @State private var animProgress: Double = 0
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: Mono.S.lg) {
-                // Big ring
-                ZStack {
-                    Circle()
-                        .trim(from: 0.12, to: 0.88)
-                        .stroke(Mono.C.surfaceTop, style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                        .rotationEffect(.degrees(90))
+        HStack(spacing: Mono.S.md) {
 
-                    Circle()
-                        .trim(from: 0.12, to: 0.12 + animProgress * 0.76)
-                        .stroke(
-                            AngularGradient(colors: [Mono.C.accent.opacity(0.5), Mono.C.accent],
-                                            center: .center, startAngle: .degrees(-90), endAngle: .degrees(270)),
-                            style: StrokeStyle(lineWidth: 9, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(90))
-
-                    VStack(spacing: 2) {
-                        Text("\(Int(progress * 100))%")
-                            .font(Mono.T.mono(24, .bold))
-                            .foregroundColor(Mono.C.text)
-                            .contentTransition(.numericText(countsDown: false))
-                        Text("funded")
-                            .font(Mono.T.mono(10, .regular))
-                            .foregroundColor(Mono.C.textTert)
-                    }
-                }
-                .frame(width: 90, height: 90)
-                .onAppear {
-                    withAnimation(.spring(duration: 1.1, bounce: 0.15).delay(0.1)) {
-                        animProgress = progress
-                    }
-                }
-                .onChange(of: progress) { _, new in
-                    withAnimation(.spring(duration: 0.6)) { animProgress = new }
-                }
-
-                // Stats column
-                VStack(alignment: .leading, spacing: Mono.S.sm) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        OverlineLabel(text: "Total Funded")
-                        HStack(alignment: .lastTextBaseline, spacing: 4) {
-                            Text(funded.indianFormattedCompact)
-                                .font(Mono.T.mono(22, .bold))
-                                .foregroundColor(Mono.C.text)
-                            Text("/ \(target.indianFormattedCompact)")
-                                .font(Mono.T.mono(12, .regular))
-                                .foregroundColor(Mono.C.textTert)
-                        }
-                    }
-
-                    MonoDivider()
-
-                    HStack(spacing: Mono.S.lg) {
-                        GoalMicroStat(value: "\(goalCount)", label: "Total")
-                        GoalMicroStat(value: "\(completedCount)", label: "Done")
-                        GoalMicroStat(value: unassigned.indianFormattedCompact, label: "Free Cash")
-                    }
+            // Funded amount + target
+            VStack(alignment: .leading, spacing: 3) {
+                OverlineLabel(text: "Total Funded", opacity: 0.45)
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text(funded.indianFormattedCompact)
+                        .font(Mono.T.mono(22, .bold))
+                        .foregroundColor(Mono.C.text)
+                        .contentTransition(.numericText(countsDown: false))
+                    Text("/ \(target.indianFormattedCompact)")
+                        .font(Mono.T.mono(11, .regular))
+                        .foregroundColor(Mono.C.textTert)
                 }
             }
-            .padding(Mono.S.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Divider
+            Rectangle().fill(Mono.C.border).frame(width: 0.5, height: 40)
+
+            // Stats stack
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(spacing: Mono.S.md) {
+                    GoalMicroStat(value: "\(goalCount)",      label: "Goals")
+                    GoalMicroStat(value: "\(completedCount)", label: "Done")
+                }
+                // Thin progress bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2).fill(Mono.C.surfaceTop).frame(height: 4)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(LinearGradient(colors: [Mono.C.accent.opacity(0.6), Mono.C.accent],
+                                                 startPoint: .leading, endPoint: .trailing))
+                            .frame(width: max(geo.size.width * animProgress, 0), height: 4)
+                            .animation(.spring(duration: 1.0, bounce: 0.1).delay(0.1), value: animProgress)
+                    }
+                }
+                .frame(height: 4)
+            }
+            .frame(width: 130)
         }
-        .monoHeroCard()
+        .padding(.horizontal, Mono.S.lg)
+        .padding(.vertical, Mono.S.md)
+        .monoCard()
+        .onAppear {
+            withAnimation(.spring(duration: 1.0, bounce: 0.1).delay(0.15)) { animProgress = progress }
+        }
+        .onChange(of: progress) { _, new in
+            withAnimation(.spring(duration: 0.6)) { animProgress = new }
+        }
     }
 }
 
@@ -420,7 +397,7 @@ private struct GoalMicroStat: View {
     let value: String
     let label: String
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .trailing, spacing: 1) {
             Text(value)
                 .font(Mono.T.mono(14, .bold))
                 .foregroundColor(Mono.C.text)
@@ -746,54 +723,106 @@ struct GoalSwipeLayout: View {
     let onTap: (SavingsItem) -> Void
     let onAdd: () -> Void
 
-    @State private var currentPage = 0
+    var body: some View {
+        GeometryReader { mainGeo in
+            let bottomPadding: CGFloat = 110 // Tab bar + extra breathing room
+            let availableHeight = max(0, mainGeo.size.height - bottomPadding)
+            let targetWidth = mainGeo.size.width * 0.82
+            let cardWidth = min(targetWidth, availableHeight * 0.75) // Enforce 3:4 ratio fits
+            
+            if #available(iOS 17.0, *) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                            CarouselCard(item: item, namespace: namespace, cardWidth: cardWidth, onTap: onTap)
+                        }
+                        CarouselCreateCard(onAdd: onAdd, cardWidth: cardWidth)
+                    }
+                    .frame(height: availableHeight)
+                    .scrollTargetLayout()
+                }
+                .contentMargins(.horizontal, 24, for: .scrollContent)
+                .scrollTargetBehavior(.viewAligned)
+                .padding(.bottom, bottomPadding)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                            CarouselCard(item: item, namespace: namespace, cardWidth: cardWidth, onTap: onTap)
+                        }
+                        CarouselCreateCard(onAdd: onAdd, cardWidth: cardWidth)
+                    }
+                    .padding(.horizontal, 24)
+                    .frame(height: availableHeight)
+                }
+                .padding(.bottom, bottomPadding)
+            }
+        }
+        .opacity(appeared ? 1 : 0)
+    }
+}
 
-    private var totalPages: Int { items.count + 1 }
-    private var showDots: Bool { totalPages <= 8 }
+struct CarouselCard: View {
+    let item: SavingsItem
+    let namespace: Namespace.ID
+    let cardWidth: CGFloat
+    let onTap: (SavingsItem) -> Void
 
     var body: some View {
-        // ZStack so TabView fills all space and dots float above the bottom
-        ZStack(alignment: .bottom) {
-            TabView(selection: $currentPage) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-                    GoalSwipeCard(item: item, namespace: namespace) { onTap(item) }
-                        .padding(.horizontal, 16)
-                        // bottom padding keeps content above tab bar + dot strip
-                        .padding(.bottom, 68)
-                        .tag(idx)
-                }
-                GoalSwipeCreateCard(onAdd: onAdd)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 68)
-                    .tag(items.count)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .opacity(appeared ? 1 : 0)
-
-            // Dot / count indicator — floated above tab bar
-            Group {
-                if showDots {
-                    HStack(spacing: 5) {
-                        ForEach(0..<totalPages, id: \.self) { i in
-                            let isCurrent = i == currentPage
-                            let isCreate  = i == items.count
-                            Capsule(style: .continuous)
-                                .fill(isCreate
-                                      ? (isCurrent ? Mono.C.accent : Mono.C.textDim.opacity(0.4))
-                                      : (isCurrent ? Mono.C.text   : Mono.C.textDim.opacity(0.4)))
-                                .frame(width: isCurrent ? 18 : 6, height: 6)
-                                .animation(.spring(duration: 0.28, bounce: 0.4), value: currentPage)
-                        }
-                    }
-                } else {
-                    Text("\(min(currentPage + 1, totalPages)) / \(totalPages)")
-                        .font(Mono.T.mono(11, .medium))
-                        .foregroundColor(Mono.C.textDim)
-                }
-            }
-            .padding(.bottom, 108) // sits just above the tab bar
+        GeometryReader { geo in
+            let minX = geo.frame(in: .global).minX
+            let screenWidth = UIScreen.main.bounds.width
+            let distance = abs(minX - 24)
+            let isFocused = distance < 30
+            let scale = max(0.85, 1 - (distance / screenWidth) * 0.15)
+            
+            GoalSwipeCard(item: item, namespace: namespace) { onTap(item) }
+                .scaleEffect(scale)
+                .rotation3DEffect(
+                    Angle(degrees: Double((minX - 24) / -20)),
+                    axis: (x: 0, y: 1, z: 0.05),
+                    perspective: 0.8
+                )
+                .shadow(
+                    color: isFocused ? Mono.C.accent.opacity(item.progress > 0 ? 0.35 : 0.15) : Color.black.opacity(0.3),
+                    radius: isFocused ? 25 : 10,
+                    x: 0,
+                    y: isFocused ? 0 : 10
+                )
+                .zIndex(isFocused ? 1 : 0)
         }
+        .frame(width: cardWidth)
+    }
+}
+
+struct CarouselCreateCard: View {
+    let onAdd: () -> Void
+    let cardWidth: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            let minX = geo.frame(in: .global).minX
+            let screenWidth = UIScreen.main.bounds.width
+            let distance = abs(minX - 24)
+            let isFocused = distance < 30
+            let scale = max(0.85, 1 - (distance / screenWidth) * 0.15)
+            
+            GoalSwipeCreateCard(onAdd: onAdd)
+                .scaleEffect(scale)
+                .rotation3DEffect(
+                    Angle(degrees: Double((minX - 24) / -20)),
+                    axis: (x: 0, y: 1, z: 0.05),
+                    perspective: 0.8
+                )
+                .shadow(
+                    color: isFocused ? Mono.C.text.opacity(0.2) : Color.black.opacity(0.3),
+                    radius: isFocused ? 20 : 10,
+                    x: 0,
+                    y: isFocused ? 0 : 10
+                )
+                .zIndex(isFocused ? 1 : 0)
+        }
+        .frame(width: cardWidth)
     }
 }
 

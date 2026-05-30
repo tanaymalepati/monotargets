@@ -426,6 +426,8 @@ final class AppStore {
             try? data.write(to: dataURL, options: .atomic)
         }
         BackupService.shared.triggerBackup(store: self)
+        // Non-blocking cloud sync
+        Task { await syncToSupabase() }
     }
 
     // MARK: - Transactions
@@ -562,6 +564,46 @@ final class AppStore {
         UserDefaults.standard.removeObject(forKey: "onboarding_done")
         UserDefaults.standard.removeObject(forKey: "user_name")
         save()
+    }
+
+    // MARK: - Supabase Sync
+
+    /// Replace in-memory + local state with data fetched from Supabase.
+    @MainActor
+    func replaceData(with remote: VaultData) {
+        transactions         = remote.transactions
+        savingsItems         = remote.savingsItems
+        earnedAchievements   = remote.earnedAchievements
+        streakCount          = remote.streakCount
+        lastStreakDate        = remote.lastStreakDate
+        longestStreak        = remote.longestStreak
+        budgets              = remote.budgets
+        activeChallenges     = remote.activeChallenges
+        dismissedWeeklyRecap = remote.dismissedWeeklyRecap
+        customCategories     = remote.customCategories
+        // persist locally so offline works
+        if let data = try? JSONEncoder().encode(remote) {
+            try? data.write(to: dataURL, options: .atomic)
+        }
+    }
+
+    /// Push current data to Supabase (no-op if not signed in).
+    func syncToSupabase() async {
+        guard await SupabaseClient.shared.isSignedIn else { return }
+        let payload = VaultData(
+            transactions:         transactions,
+            savingsItems:         savingsItems,
+            backupFolderBookmark: backupFolderBookmark,
+            earnedAchievements:   earnedAchievements,
+            streakCount:          streakCount,
+            lastStreakDate:       lastStreakDate,
+            longestStreak:        longestStreak,
+            budgets:              budgets,
+            activeChallenges:     activeChallenges,
+            dismissedWeeklyRecap: dismissedWeeklyRecap,
+            customCategories:     customCategories
+        )
+        try? await SupabaseClient.shared.uploadVaultData(payload)
     }
 
     // MARK: - Stats / Queries

@@ -100,7 +100,7 @@ struct GoalDetailView: View {
                                                 .fill(Mono.C.surfaceUp)
                                                 .overlay(
                                                     RoundedRectangle(cornerRadius: Mono.R.inner, style: .continuous)
-                                                        .strokeBorder(
+                                                            .strokeBorder(
                                                             isMonochrome ? Mono.C.borderBright : Mono.C.accent.opacity(0.85),
                                                             lineWidth: 1.0
                                                         )
