@@ -3,53 +3,66 @@ import SwiftUI
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        return .portrait
+        .portrait
     }
 }
 
 @main
 struct monotargetsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var store           = AppStore()
-    @State private var isAuthenticated = false
-    @State private var checkedSession  = false
+    @State private var store = AppStore()
+
+    // True once we've finished the async launch check
+    @State private var launchChecked  = false
+    // True when the user should see the main app (either logged in or offline)
+    @State private var showMainApp    = false
 
     var body: some Scene {
         WindowGroup {
             ZStack {
-                if !checkedSession {
-                    // Splash while we check stored session
+                if !launchChecked {
                     SplashView()
-                } else if isAuthenticated {
+                        .transition(.opacity)
+                } else if showMainApp {
                     ContentView()
                         .environment(store)
                         .transition(.opacity)
                 } else {
                     AuthView(onAuthenticated: {
-                        withAnimation(.spring(duration: 0.45, bounce: 0.15)) {
-                            isAuthenticated = true
-                        }
-                        // Start background sync after login
-                        Task { await store.syncToSupabase() }
+                        withAnimation(.easeInOut(duration: 0.35)) { showMainApp = true }
                     })
                     .environment(store)
                     .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.35), value: checkedSession)
-            .animation(.easeInOut(duration: 0.35), value: isAuthenticated)
-            .task {
-                // Check for a stored Supabase session
-                if let _ = await SupabaseClient.shared.loadStoredSession() {
-                    // Pull latest cloud data
-                    if let remote = try? await SupabaseClient.shared.downloadVaultData() {
-                        await store.replaceData(with: remote)
-                    }
-                    isAuthenticated = true
-                }
-                checkedSession = true
-            }
+            .animation(.easeInOut(duration: 0.3), value: launchChecked)
+            .animation(.easeInOut(duration: 0.3), value: showMainApp)
+            .task { await checkLaunchState() }
         }
+    }
+
+    private func checkLaunchState() async {
+        // 1. Already chose offline mode in a previous session
+        if UserDefaults.standard.bool(forKey: "offline_mode") {
+            launchChecked = true
+            showMainApp   = true
+            return
+        }
+
+        // 2. Stored Supabase session
+        if let _ = await SupabaseClient.shared.loadStoredSession() {
+            // Pull latest cloud data before showing the app
+            if let remote = try? await SupabaseClient.shared.downloadVaultData() {
+                await store.replaceData(with: remote)
+            }
+            launchChecked = true
+            showMainApp   = true
+            return
+        }
+
+        // 3. No session, no offline flag → show auth
+        launchChecked = true
+        showMainApp   = false
     }
 }
 
@@ -71,7 +84,7 @@ private struct SplashView: View {
                     .foregroundColor(Mono.C.text)
                     .tracking(4)
             }
-            .onAppear { pulse = true }
         }
+        .onAppear { pulse = true }
     }
 }

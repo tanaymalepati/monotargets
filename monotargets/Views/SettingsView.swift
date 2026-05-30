@@ -18,6 +18,11 @@ struct SettingsView: View {
     @State private var showRerunConfirm    = false
     @State private var showBudgets         = false
     @State private var showCustomCategories = false
+    @State private var showConnectAccount  = false
+    @State private var showSignOutConfirm  = false
+
+    private var isOfflineMode:  Bool   { UserDefaults.standard.bool(forKey: "offline_mode") }
+    private var currentUsername: String? { UserDefaults.standard.string(forKey: "user_name") }
 
     enum BackupStatus: Equatable {
         case idle, success(String), error(String)
@@ -339,6 +344,40 @@ struct SettingsView: View {
 
                     // Account section
                     SettingsSection(title: "Account") {
+                        if isOfflineMode {
+                            // Offer to create/connect an account
+                            SettingsRow(icon: "person.crop.circle.badge.plus", label: "Create / Connect Account") {
+                                Text("Offline")
+                                    .font(Mono.T.mono(11, .medium))
+                                    .foregroundColor(Mono.C.textDim)
+                                    .padding(.horizontal, 7).padding(.vertical, 3)
+                                    .background(Capsule().fill(Mono.C.surfaceTop))
+                            } action: {
+                                showConnectAccount = true
+                                Haptic.light()
+                            }
+                        } else if let uname = currentUsername {
+                            // Signed-in user info
+                            SettingsRow(icon: "person.circle.fill", label: "@\(uname)") {
+                                Text("Signed In")
+                                    .font(Mono.T.mono(11, .medium))
+                                    .foregroundColor(Mono.C.accent)
+                                    .padding(.horizontal, 7).padding(.vertical, 3)
+                                    .background(Capsule().fill(Mono.C.accent.opacity(0.12)))
+                            } action: {}
+
+                            MonoDivider().padding(.horizontal, Mono.S.md)
+
+                            SettingsRow(icon: "arrow.right.circle", label: "Sign Out") {
+                                EmptyView()
+                            } action: {
+                                showSignOutConfirm = true
+                                Haptic.medium()
+                            }
+                        }
+
+                        MonoDivider().padding(.horizontal, Mono.S.md)
+
                         SettingsRow(icon: "arrow.counterclockwise.circle.fill", label: "Re-run Setup") {
                             EmptyView()
                         } action: {
@@ -382,6 +421,32 @@ struct SettingsView: View {
                 appeared = true
             }
             refreshBackupInfo()
+        }
+        // Connect / create account sheet (offline users)
+        .sheet(isPresented: $showConnectAccount) {
+            NavigationStack {
+                ConnectAccountView(onConnected: {
+                    showConnectAccount = false
+                })
+                .environment(store)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Mono.C.bg)
+            .presentationCornerRadius(24)
+        }
+        // Sign-out confirmation
+        .confirmationDialog("Sign out?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+            Button("Sign Out", role: .destructive) {
+                Task {
+                    await SupabaseClient.shared.signOut()
+                    UserDefaults.standard.set(true, forKey: "offline_mode")
+                    Haptic.medium()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll stay in offline mode. Your data stays on this device.")
         }
         .sheet(isPresented: $showCustomCategories) {
             CustomCategoriesView()

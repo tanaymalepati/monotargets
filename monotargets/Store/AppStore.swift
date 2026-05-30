@@ -566,6 +566,24 @@ final class AppStore {
         save()
     }
 
+    // MARK: - Vault Snapshot
+
+    var currentVaultData: VaultData {
+        VaultData(
+            transactions:         transactions,
+            savingsItems:         savingsItems,
+            backupFolderBookmark: backupFolderBookmark,
+            earnedAchievements:   earnedAchievements,
+            streakCount:          streakCount,
+            lastStreakDate:       lastStreakDate,
+            longestStreak:        longestStreak,
+            budgets:              budgets,
+            activeChallenges:     activeChallenges,
+            dismissedWeeklyRecap: dismissedWeeklyRecap,
+            customCategories:     customCategories
+        )
+    }
+
     // MARK: - Supabase Sync
 
     /// Replace in-memory + local state with data fetched from Supabase.

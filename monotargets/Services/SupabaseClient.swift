@@ -1,18 +1,54 @@
 import Foundation
 
-// MARK: - Supabase Configuration
+// MARK: - Configuration
 
 enum Supabase {
     static let url     = "https://htebllrggksxbbgdyuso.supabase.co"
     static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh0ZWJsbHJnZ2tzeGJiZ2R5dXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNTM1NjUsImV4cCI6MjA5NTYyOTU2NX0.eP-Uhaj6rzviWe9U-NZk2rVpH-5jZoRr9dIJ0PrwzsA"
+
+    // Internal auth email for a username — never shown to the user
+    static func authEmail(for username: String) -> String {
+        "\(username.lowercased())@monotargets.local"
+    }
+}
+
+// MARK: - Username Validation
+
+enum UsernameValidation {
+    case valid
+    case tooShort
+    case invalidChars
+    case leadingTrailingUnderscore
+    case onlyNumbers
+    case taken
+
+    var message: String {
+        switch self {
+        case .valid:                     return ""
+        case .tooShort:                  return "At least 5 characters"
+        case .invalidChars:              return "Letters, numbers and _ only"
+        case .leadingTrailingUnderscore: return "Can't start or end with _"
+        case .onlyNumbers:               return "Must contain at least one letter"
+        case .taken:                     return "Username taken — pick another or sign in"
+        }
+    }
+
+    static func check(_ raw: String) -> UsernameValidation {
+        guard raw.count >= 5 else { return .tooShort }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_"))
+        guard raw.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return .invalidChars }
+        guard !raw.hasPrefix("_") && !raw.hasSuffix("_") else { return .leadingTrailingUnderscore }
+        guard !raw.allSatisfy(\.isNumber) else { return .onlyNumbers }
+        return .valid
+    }
 }
 
 // MARK: - Auth Models
 
 struct AuthResponse: Codable {
-    let accessToken:  String
-    let refreshToken: String
-    let user:         SupabaseUser
+    let accessToken:  String?
+    let refreshToken: String?
+    let user:         SupabaseUser?
     enum CodingKeys: String, CodingKey {
         case accessToken  = "access_token"
         case refreshToken = "refresh_token"
@@ -25,164 +61,203 @@ struct SupabaseUser: Codable {
     let email: String?
 }
 
-struct AuthError: Codable, LocalizedError {
-    let message: String
-    var errorDescription: String? { AuthError.friendlyMessage(message) }
+// MARK: - Auth Errors
 
-    // Supabase returns errors in several shapes — normalise them all
-    init(message: String) { self.message = message }
+enum AuthClientError: LocalizedError {
+    case userNotFound
+    case usernameTaken
+    case wrongPassword
+    case emailConfirmationRequired
+    case notSignedIn
+    case custom(String)
 
-    // Shape 1: { "msg": "...", "error_code": "..." }
-    // Shape 2: { "error": "...", "error_description": "..." }
-    // Shape 3: { "message": "..." }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: DynamicKey.self)
-        if let v = try? c.decode(String.self, forKey: DynamicKey("msg")) {
-            message = v
-        } else if let v = try? c.decode(String.self, forKey: DynamicKey("error_description")) {
-            message = v
-        } else if let v = try? c.decode(String.self, forKey: DynamicKey("error")) {
-            message = v
-        } else if let v = try? c.decode(String.self, forKey: DynamicKey("message")) {
-            message = v
-        } else {
-            message = "Unknown error"
-        }
-    }
-
-    static func friendlyMessage(_ raw: String) -> String {
-        switch raw.lowercased() {
-        case let s where s.contains("invalid login") || s.contains("invalid_credentials") || s.contains("invalid grant"):
-            return "Incorrect email or password."
-        case let s where s.contains("email not confirmed"):
-            return "Please confirm your email before signing in. Check your inbox."
-        case let s where s.contains("user already registered") || s.contains("already been registered"):
-            return "An account with this email already exists. Try signing in."
-        case let s where s.contains("password should be"):
-            return "Password must be at least 6 characters."
-        case let s where s.contains("unable to validate email"):
-            return "Please enter a valid email address."
-        default:
-            return raw
+    var errorDescription: String? {
+        switch self {
+        case .userNotFound:              return "No account found with that username or email."
+        case .usernameTaken:             return "Username already taken — pick another or sign in."
+        case .wrongPassword:             return "Incorrect password."
+        case .emailConfirmationRequired: return "Please confirm your email, then try signing in."
+        case .notSignedIn:               return "You're not signed in."
+        case .custom(let m):             return m
         }
     }
 }
 
-private struct DynamicKey: CodingKey {
-    var stringValue: String
-    var intValue: Int? { nil }
-    init(_ string: String) { stringValue = string }
-    init?(stringValue: String) { self.stringValue = stringValue }
-    init?(intValue: Int) { return nil }
-}
-
-// MARK: - Session persistence
+// MARK: - Session Storage
 
 struct StoredSession: Codable {
     let accessToken:  String
     let refreshToken: String
     let userID:       String
+    let username:     String
     let email:        String?
 }
 
-// MARK: - Client
+// MARK: - Supabase Client
 
 actor SupabaseClient {
     static let shared = SupabaseClient()
 
     private var accessToken:  String?
     private var refreshToken: String?
-    private(set) var currentUserID: String?
-    private(set) var currentEmail:  String?
+    private(set) var currentUserID:  String?
+    private(set) var currentUsername: String?
+    private(set) var currentEmail:    String?
 
-    private let sessionKey = "supabase_session"
+    private let sessionKey = "supabase_session_v2"
 
-    // ── Session ────────────────────────────────────────────
-
-    func loadStoredSession() -> StoredSession? {
-        guard let data = UserDefaults.standard.data(forKey: sessionKey),
-              let session = try? JSONDecoder().decode(StoredSession.self, from: data)
-        else { return nil }
-        accessToken    = session.accessToken
-        refreshToken   = session.refreshToken
-        currentUserID  = session.userID
-        currentEmail   = session.email
-        return session
-    }
+    // ── Session ─────────────────────────────────────────────
 
     var isSignedIn: Bool { accessToken != nil }
 
-    private func persistSession(_ auth: AuthResponse) {
-        accessToken   = auth.accessToken
-        refreshToken  = auth.refreshToken
-        currentUserID = auth.user.id
-        currentEmail  = auth.user.email
-        let stored = StoredSession(
-            accessToken:  auth.accessToken,
-            refreshToken: auth.refreshToken,
-            userID:       auth.user.id,
-            email:        auth.user.email
-        )
-        if let data = try? JSONEncoder().encode(stored) {
+    func loadStoredSession() -> StoredSession? {
+        guard
+            let data = UserDefaults.standard.data(forKey: sessionKey),
+            let s    = try? JSONDecoder().decode(StoredSession.self, from: data)
+        else { return nil }
+        accessToken      = s.accessToken
+        refreshToken     = s.refreshToken
+        currentUserID    = s.userID
+        currentUsername  = s.username
+        currentEmail     = s.email
+        return s
+    }
+
+    private func persist(_ auth: AuthResponse, username: String, realEmail: String?) {
+        guard let at = auth.accessToken, let rt = auth.refreshToken, let u = auth.user else { return }
+        accessToken     = at
+        refreshToken    = rt
+        currentUserID   = u.id
+        currentUsername = username
+        currentEmail    = realEmail
+        let s = StoredSession(accessToken: at, refreshToken: rt,
+                              userID: u.id, username: username, email: realEmail)
+        if let data = try? JSONEncoder().encode(s) {
             UserDefaults.standard.set(data, forKey: sessionKey)
         }
     }
 
-    private func clearSession() {
-        accessToken   = nil
-        refreshToken  = nil
-        currentUserID = nil
-        currentEmail  = nil
+    func clearSession() {
+        accessToken     = nil
+        refreshToken    = nil
+        currentUserID   = nil
+        currentUsername = nil
+        currentEmail    = nil
         UserDefaults.standard.removeObject(forKey: sessionKey)
     }
 
-    // ── Auth endpoints ─────────────────────────────────────
+    // ── Username availability ────────────────────────────────
 
-    func signUp(email: String, password: String, displayName: String) async throws -> AuthResponse {
-        let body: [String: Any] = [
-            "email":    email,
-            "password": password,
-            "data":     ["display_name": displayName]
-        ]
-        let auth: AuthResponse = try await post(path: "/auth/v1/signup", body: body, auth: false)
-        persistSession(auth)
-        return auth
+    func isUsernameAvailable(_ username: String) async -> Bool {
+        let encoded = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username
+        let rows: [[String: Any]] = (try? await select(
+            table: "profiles",
+            query: "username=ilike.\(encoded)&select=id",
+            requiresAuth: false
+        )) ?? []
+        return rows.isEmpty
     }
 
-    func signIn(email: String, password: String) async throws -> AuthResponse {
-        let body: [String: Any] = ["email": email, "password": password]
-        let auth: AuthResponse = try await post(
-            path: "/auth/v1/token?grant_type=password", body: body, auth: false
-        )
-        persistSession(auth)
-        return auth
+    // ── Sign Up ──────────────────────────────────────────────
+
+    func signUp(username: String, password: String, realEmail: String?) async throws {
+        // 1. Validate username format
+        let validation = UsernameValidation.check(username)
+        guard validation == .valid else { throw AuthClientError.custom(validation.message) }
+
+        // 2. Check availability
+        let available = await isUsernameAvailable(username)
+        guard available else { throw AuthClientError.usernameTaken }
+
+        // 3. Create auth user with generated internal email
+        let authEmail = Supabase.authEmail(for: username)
+        var meta: [String: String] = ["username": username]
+        if let real = realEmail, !real.trimmingCharacters(in: .whitespaces).isEmpty {
+            meta["real_email"] = real.trimmingCharacters(in: .whitespaces).lowercased()
+            meta["display_name"] = username
+        } else {
+            meta["display_name"] = username
+        }
+
+        let body: [String: Any] = ["email": authEmail, "password": password, "data": meta]
+        let auth: AuthResponse = try await post(path: "/auth/v1/signup", body: body, requiresAuth: false)
+
+        // Check if email confirmation is blocking us
+        if auth.accessToken == nil {
+            throw AuthClientError.emailConfirmationRequired
+        }
+
+        persist(auth, username: username, realEmail: realEmail)
+
+        // Save display name locally
+        UserDefaults.standard.set(username, forKey: "user_name")
     }
 
-    func signOut() async throws {
-        guard let token = accessToken else { clearSession(); return }
-        var req = request(path: "/auth/v1/logout", method: "POST")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        _ = try? await URLSession.shared.data(for: req)
+    // ── Sign In ──────────────────────────────────────────────
+
+    func signIn(usernameOrEmail: String, password: String) async throws {
+        let trimmed = usernameOrEmail.trimmingCharacters(in: .whitespaces)
+        let isEmail = trimmed.contains("@")
+
+        let (authEmail, username): (String, String)
+
+        if isEmail {
+            // Lookup username from profiles by real_email
+            let encoded = trimmed.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmed
+            let rows: [[String: Any]] = (try? await select(
+                table: "profiles",
+                query: "real_email=eq.\(encoded)&select=username",
+                requiresAuth: false
+            )) ?? []
+            guard let first = rows.first, let uname = first["username"] as? String else {
+                throw AuthClientError.userNotFound
+            }
+            username  = uname
+            authEmail = Supabase.authEmail(for: uname)
+        } else {
+            // Check username exists before attempting sign-in
+            let exists = !(await isUsernameAvailable(trimmed))
+            guard exists else { throw AuthClientError.userNotFound }
+            username  = trimmed
+            authEmail = Supabase.authEmail(for: trimmed)
+        }
+
+        // Attempt sign-in
+        let body: [String: Any] = ["email": authEmail, "password": password]
+        do {
+            let auth: AuthResponse = try await post(
+                path: "/auth/v1/token?grant_type=password",
+                body: body, requiresAuth: false
+            )
+            // Fetch real_email from profiles
+            let realEmail = await fetchRealEmail(username: username)
+            persist(auth, username: username, realEmail: realEmail)
+            UserDefaults.standard.set(username, forKey: "user_name")
+        } catch let err as AuthClientError {
+            throw err
+        } catch {
+            // Map generic Supabase invalid_credentials to wrong password (user exists but pw wrong)
+            throw AuthClientError.wrongPassword
+        }
+    }
+
+    // ── Sign Out ─────────────────────────────────────────────
+
+    func signOut() async {
+        if let token = accessToken {
+            var req = makeRequest(path: "/auth/v1/logout", method: "POST")
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            _ = try? await URLSession.shared.data(for: req)
+        }
         clearSession()
     }
 
-    func refreshSession() async throws {
-        guard let rt = refreshToken else { throw AuthError(message: "No refresh token") }
-        let body: [String: Any] = ["refresh_token": rt]
-        let auth: AuthResponse = try await post(
-            path: "/auth/v1/token?grant_type=refresh_token", body: body, auth: false
-        )
-        persistSession(auth)
-    }
-
-    // ── Vault data ─────────────────────────────────────────
+    // ── Vault sync ───────────────────────────────────────────
 
     func uploadVaultData(_ data: VaultData) async throws {
-        guard let uid = currentUserID else { throw AuthError(message: "Not signed in") }
+        guard let uid = currentUserID else { throw AuthClientError.notSignedIn }
         let encoded = try JSONEncoder().encode(data)
-        guard let payload = try? JSONSerialization.jsonObject(with: encoded) else {
-            throw AuthError(message: "Encode failed")
-        }
+        guard let payload = try? JSONSerialization.jsonObject(with: encoded) else { return }
         let body: [String: Any] = ["user_id": uid, "payload": payload]
         try await upsert(table: "vault_data", body: body, onConflict: "user_id")
     }
@@ -193,75 +268,84 @@ actor SupabaseClient {
             table: "vault_data",
             query: "user_id=eq.\(uid)&select=payload"
         )
-        guard let first = rows.first,
-              let payload = first["payload"],
-              let jsonData = try? JSONSerialization.data(withJSONObject: payload)
+        guard
+            let first   = rows.first,
+            let payload = first["payload"],
+            let jsonData = try? JSONSerialization.data(withJSONObject: payload)
         else { return nil }
-        return try JSONDecoder().decode(VaultData.self, from: jsonData)
+        return try? JSONDecoder().decode(VaultData.self, from: jsonData)
     }
 
-    // ── Profile ────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────
 
-    func updateProfile(displayName: String) async throws {
-        guard let uid = currentUserID else { return }
-        let body: [String: Any] = ["id": uid, "display_name": displayName]
-        try await upsert(table: "profiles", body: body, onConflict: "id")
+    private func fetchRealEmail(username: String) async -> String? {
+        let encoded = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username
+        let rows: [[String: Any]] = (try? await select(
+            table: "profiles",
+            query: "username=ilike.\(encoded)&select=real_email",
+            requiresAuth: false
+        )) ?? []
+        return rows.first?["real_email"] as? String
     }
 
-    // ── HTTP helpers ────────────────────────────────────────
-
-    private func request(path: String, method: String) -> URLRequest {
+    private func makeRequest(path: String, method: String, requiresAuth: Bool = true) -> URLRequest {
         var req = URLRequest(url: URL(string: Supabase.url + path)!)
         req.httpMethod = method
         req.setValue(Supabase.anonKey, forHTTPHeaderField: "apikey")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = accessToken {
+        if requiresAuth, let token = accessToken {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         return req
     }
 
-    private func post<T: Decodable>(path: String, body: [String: Any], auth: Bool) async throws -> T {
-        var req = request(path: path, method: "POST")
-        if !auth { req.setValue(nil, forHTTPHeaderField: "Authorization") }
+    private func post<T: Decodable>(path: String, body: [String: Any], requiresAuth: Bool = true) async throws -> T {
+        var req = makeRequest(path: path, method: "POST", requiresAuth: requiresAuth)
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-            // Try all known Supabase error shapes
-            if let err = try? JSONDecoder().decode(AuthError.self, from: data) {
-                throw err
-            }
-            let raw = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-            throw AuthError(message: raw)
+            let msg = parseErrorMessage(from: data, status: http.statusCode)
+            throw AuthClientError.custom(msg)
         }
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            let raw = String(data: data, encoding: .utf8) ?? "Decode failed"
-            throw AuthError(message: "Response parse error: \(raw)")
-        }
+        return try JSONDecoder().decode(T.self, from: data)
     }
 
     private func upsert(table: String, body: [String: Any], onConflict: String) async throws {
-        var req = request(path: "/rest/v1/\(table)", method: "POST")
+        var req = makeRequest(path: "/rest/v1/\(table)", method: "POST")
         req.setValue("resolution=merge-duplicates", forHTTPHeaderField: "Prefer")
         req.setValue("on_conflict=\(onConflict)", forHTTPHeaderField: "Prefer")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-            let msg = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw AuthError(message: msg)
+            throw AuthClientError.custom(parseErrorMessage(from: data, status: http.statusCode))
         }
     }
 
-    private func select(table: String, query: String) async throws -> [[String: Any]] {
-        var req = request(path: "/rest/v1/\(table)?\(query)", method: "GET")
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
-            let msg = String(data: data, encoding: .utf8) ?? "Unknown"
-            throw AuthError(message: msg)
-        }
+    func select(table: String, query: String, requiresAuth: Bool = true) async throws -> [[String: Any]] {
+        let req = makeRequest(path: "/rest/v1/\(table)?\(query)", method: "GET", requiresAuth: requiresAuth)
+        let (data, _) = try await URLSession.shared.data(for: req)
         return (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]) ?? []
+    }
+
+    private func parseErrorMessage(from data: Data, status: Int) -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return "HTTP \(status)"
+        }
+        let raw = (json["msg"] as? String)
+            ?? (json["error_description"] as? String)
+            ?? (json["message"] as? String)
+            ?? (json["error"] as? String)
+            ?? "HTTP \(status)"
+
+        // Map raw Supabase errors to friendly strings
+        let lower = raw.lowercased()
+        if lower.contains("invalid login") || lower.contains("invalid_credentials") {
+            return "Incorrect password."
+        }
+        if lower.contains("email not confirmed") {
+            return "Email confirmation required. Disable 'Confirm email' in Supabase Auth settings."
+        }
+        return raw
     }
 }
